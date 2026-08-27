@@ -15,7 +15,6 @@ contract TheSpirethTest is Test {
     uint256 constant MINT_CAP = 100;
 
     function setUp() public {
-        vm.prank(owner);
         spireth = new TheSpireth(owner, dev, ROLL_COST, MINT_CAP);
     }
 
@@ -106,6 +105,158 @@ contract TheSpirethTest is Test {
         assertEq(spireth.rollCost(), 0.005 ether);
     }
 
+    function test_FreezeAtPlus25() public {
+        _setupLiveSeason();
+        
+        uint256 secret = 1;
+        bool reachedSummit = false;
+        
+        for (uint256 i = 0; i < 100 && !reachedSummit; i++) {
+            (int8 height, , , , ,) = spireth.getImp(0);
+            if (height >= 25) {
+                reachedSummit = true;
+                break;
+            }
+            
+            bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
+            vm.prank(alice);
+            spireth.commitRoll{value: ROLL_COST}(0, commitment);
+            vm.roll(block.number + 2);
+            vm.prank(alice);
+            spireth.revealRoll(0, secret);
+            
+            if (uint8(spireth.seasonState()) == uint8(TheSpireth.SeasonState.Frozen)) {
+                reachedSummit = true;
+                break;
+            }
+            
+            vm.warp(block.timestamp + 24 hours + 1);
+            secret++;
+        }
+        
+        assertEq(spireth.SUMMIT(), int8(25));
+        assertEq(spireth.ABYSS(), int8(-25));
+    }
+
+    function test_FreezeAtMinus25() public {
+        _setupLiveSeason();
+        
+        uint256 secret = 1;
+        bool reachedAbyss = false;
+        
+        for (uint256 i = 0; i < 100 && !reachedAbyss; i++) {
+            (int8 height, , , , ,) = spireth.getImp(0);
+            if (height <= -25) {
+                reachedAbyss = true;
+                break;
+            }
+            
+            bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
+            vm.prank(alice);
+            spireth.commitRoll{value: ROLL_COST}(0, commitment);
+            vm.roll(block.number + 2);
+            vm.prank(alice);
+            spireth.revealRoll(0, secret);
+            
+            if (uint8(spireth.seasonState()) == uint8(TheSpireth.SeasonState.Frozen)) {
+                reachedAbyss = true;
+                break;
+            }
+            
+            vm.warp(block.timestamp + 24 hours + 1);
+            secret++;
+        }
+        
+        assertEq(spireth.SUMMIT(), int8(25));
+        assertEq(spireth.ABYSS(), int8(-25));
+    }
+
+    function test_EquipPfp() public {
+        MockERC721 mockNft = new MockERC721();
+        
+        vm.prank(alice);
+        spireth.mint();
+        
+        mockNft.mint(alice, 42);
+        
+        vm.prank(alice);
+        spireth.equipPfp(0, address(mockNft), 42);
+        
+        (address nft, uint256 tokenId) = spireth.getEquippedPfp(0);
+        assertEq(nft, address(mockNft));
+        assertEq(tokenId, 42);
+    }
+
+    function test_ClearPfp() public {
+        MockERC721 mockNft = new MockERC721();
+        
+        vm.prank(alice);
+        spireth.mint();
+        
+        mockNft.mint(alice, 42);
+        
+        vm.prank(alice);
+        spireth.equipPfp(0, address(mockNft), 42);
+        
+        vm.prank(alice);
+        spireth.clearPfp(0);
+        
+        (address nft, uint256 tokenId) = spireth.getEquippedPfp(0);
+        assertEq(nft, address(0));
+        assertEq(tokenId, 0);
+    }
+
+    function test_EquipPfpNotImpOwner() public {
+        MockERC721 mockNft = new MockERC721();
+        
+        vm.prank(alice);
+        spireth.mint();
+        
+        mockNft.mint(bob, 42);
+        
+        vm.prank(bob);
+        vm.expectRevert(TheSpireth.NotImpOwner.selector);
+        spireth.equipPfp(0, address(mockNft), 42);
+    }
+
+    function test_EquipPfpNotNftOwner() public {
+        MockERC721 mockNft = new MockERC721();
+        
+        vm.prank(alice);
+        spireth.mint();
+        
+        mockNft.mint(bob, 42);
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.NotNftOwner.selector);
+        spireth.equipPfp(0, address(mockNft), 42);
+    }
+
+    function test_ClearPfpNotOwner() public {
+        MockERC721 mockNft = new MockERC721();
+        
+        vm.prank(alice);
+        spireth.mint();
+        
+        mockNft.mint(alice, 42);
+        
+        vm.prank(alice);
+        spireth.equipPfp(0, address(mockNft), 42);
+        
+        vm.prank(bob);
+        vm.expectRevert(TheSpireth.NotImpOwner.selector);
+        spireth.clearPfp(0);
+    }
+
+    function test_ClearPfpNoPfpEquipped() public {
+        vm.prank(alice);
+        spireth.mint();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.NoPfpEquipped.selector);
+        spireth.clearPfp(0);
+    }
+
     function _setupLiveSeason() internal {
         vm.deal(alice, 100 ether);
         vm.deal(bob, 100 ether);
@@ -115,5 +266,17 @@ contract TheSpirethTest is Test {
         spireth.mint();
         vm.prank(owner);
         spireth.soundHorn();
+    }
+}
+
+contract MockERC721 {
+    mapping(uint256 => address) private _owners;
+    
+    function mint(address to, uint256 tokenId) external {
+        _owners[tokenId] = to;
+    }
+    
+    function ownerOf(uint256 tokenId) external view returns (address) {
+        return _owners[tokenId];
     }
 }
