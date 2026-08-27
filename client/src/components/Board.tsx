@@ -8,14 +8,59 @@ interface ImpData {
   height: number
   isDead: boolean
   owner: string
+  pfpNft: string
+  pfpTokenId: string
+}
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+const IPFS_GATEWAYS = ['https://ipfs.io/ipfs/', 'https://cloudflare-ipfs.com/ipfs/', 'https://gateway.pinata.cloud/ipfs/']
+
+function convertToHttpUrl(uri: string): string {
+  if (!uri) return ''
+  if (uri.startsWith('ipfs://')) {
+    return IPFS_GATEWAYS[0] + uri.slice(7)
+  }
+  if (uri.startsWith('data:')) {
+    return uri
+  }
+  return uri
 }
 
 function ImpMarker({ imp, isSelected, onClick }: { imp: ImpData; isSelected: boolean; onClick: () => void }) {
+  const [pfpUrl, setPfpUrl] = useState<string | null>(null)
+  const [imageError, setImageError] = useState(false)
+  
+  useEffect(() => {
+    const hasPfp = imp.pfpNft && imp.pfpNft !== ZERO_ADDRESS
+    if (!hasPfp) {
+      setPfpUrl(null)
+      return
+    }
+    
+    const fetchTokenUri = async () => {
+      try {
+        const response = await fetch(`/api/nft-metadata?contract=${imp.pfpNft}&tokenId=${imp.pfpTokenId}`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.image) {
+            setPfpUrl(convertToHttpUrl(data.image))
+          }
+        }
+      } catch {
+        setImageError(true)
+      }
+    }
+    
+    fetchTokenUri()
+  }, [imp.pfpNft, imp.pfpTokenId])
+  
+  const hasPfpImage = pfpUrl && !imageError
+  
   return (
     <button
       onClick={onClick}
       className={`
-        w-5 h-5 rounded-full transition-all duration-300 border-2
+        w-5 h-5 rounded-full transition-all duration-300 border-2 overflow-hidden
         ${imp.isDead 
           ? 'bg-zinc-700 border-zinc-600 opacity-50' 
           : isSelected
@@ -24,7 +69,16 @@ function ImpMarker({ imp, isSelected, onClick }: { imp: ImpData; isSelected: boo
         }
       `}
       title={`Imp #${imp.id} - Floor ${imp.height}${imp.isDead ? ' (Dead)' : ''}`}
-    />
+    >
+      {hasPfpImage && (
+        <img
+          src={pfpUrl}
+          alt=""
+          className="w-full h-full object-cover"
+          onError={() => setImageError(true)}
+        />
+      )}
+    </button>
   )
 }
 
@@ -42,10 +96,10 @@ function Floor({
   maxWidth: number
 }) {
   const absLevel = Math.abs(level)
-  const width = maxWidth - (absLevel * ((maxWidth - 20) / 36))
+  const width = maxWidth - (absLevel * ((maxWidth - 20) / 25))
   const isCenter = level === 0
-  const isSummit = level === 36
-  const isAbyss = level === -36
+  const isSummit = level === 25
+  const isAbyss = level === -25
   
   return (
     <div 
@@ -112,7 +166,9 @@ export function Board({
         id: BigInt(i),
         height: imp.height,
         isDead: imp.isDead,
-        owner: imp.owner
+        owner: imp.owner,
+        pfpNft: imp.pfpNft || ZERO_ADDRESS,
+        pfpTokenId: imp.pfpTokenId || '0',
       }))
       setImps(validImps)
     }
@@ -124,7 +180,7 @@ export function Board({
 
   const impsByFloor = useMemo(() => {
     const map = new Map<number, ImpData[]>()
-    for (let i = -36; i <= 36; i++) {
+    for (let i = -25; i <= 25; i++) {
       map.set(i, [])
     }
     imps.forEach(imp => {
@@ -136,7 +192,7 @@ export function Board({
 
   const floors = useMemo(() => {
     const result = []
-    for (let i = 36; i >= -36; i--) {
+    for (let i = 25; i >= -25; i--) {
       result.push(i)
     }
     return result
@@ -151,8 +207,8 @@ export function Board({
       <div className="relative pl-12">
         <div className="absolute left-0 top-0 bottom-0 w-px bg-gradient-to-b from-emerald-500 via-zinc-700 to-red-500" />
         
-        <div className="absolute -left-1 top-0 w-3 h-3 rotate-45 bg-emerald-500" title="Summit +36" />
-        <div className="absolute -left-1 bottom-0 w-3 h-3 rotate-45 bg-red-500" title="Abyss -36" />
+        <div className="absolute -left-1 top-0 w-3 h-3 rotate-45 bg-emerald-500" title="Summit +25" />
+        <div className="absolute -left-1 bottom-0 w-3 h-3 rotate-45 bg-red-500" title="Abyss -25" />
         
         <div className="flex flex-col items-center space-y-px">
           {floors.map(level => (

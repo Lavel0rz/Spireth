@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -24,8 +25,8 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  * - Block producers cannot know the player's secret when producing the block
  */
 contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
-    int8 public constant SUMMIT = 36;
-    int8 public constant ABYSS = -36;
+    int8 public constant SUMMIT = 25;
+    int8 public constant ABYSS = -25;
     uint256 public constant SIGNUP_DURATION = 72 hours;
     uint256 public constant SEASON_MAX_DURATION = 45 days;
     uint256 public constant ROLL_COOLDOWN = 24 hours;
@@ -49,6 +50,11 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         bool pending;
     }
     
+    struct EquippedPfp {
+        address nft;
+        uint256 tokenId;
+    }
+    
     address public immutable dev;
     uint256 public rollCost;
     uint256 public mintCap;
@@ -65,6 +71,7 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     mapping(uint256 => Imp) public imps;
     mapping(uint256 => PendingRoll) public pendingRolls;
     mapping(address => bool) public hasMinted;
+    mapping(uint256 => EquippedPfp) public equippedPfps;
     
     uint256[] public livingImpsAtFreeze;
     uint256 public bellRingerPrize;
@@ -78,6 +85,8 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     event ImpDied(uint256 indexed impId, int8 finalHeight);
     event SeasonFrozen(uint256 indexed bellRingerId, int8 finalHeight);
     event PrizeClaimed(uint256 indexed impId, address indexed owner, uint256 amount);
+    event PfpEquipped(uint256 indexed impId, address indexed nft, uint256 tokenId);
+    event PfpCleared(uint256 indexed impId);
     
     error NotInSignup();
     error NotLive();
@@ -99,6 +108,8 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     error AlreadyClaimed();
     error TransferFailed();
     error SeasonExpired();
+    error NotNftOwner();
+    error NoPfpEquipped();
     
     constructor(
         address _owner,
@@ -370,6 +381,22 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         emit PrizeClaimed(impId, msg.sender, prize);
     }
     
+    function equipPfp(uint256 impId, address nft, uint256 tokenId) external {
+        if (ownerOf(impId) != msg.sender) revert NotImpOwner();
+        if (IERC721(nft).ownerOf(tokenId) != msg.sender) revert NotNftOwner();
+        
+        equippedPfps[impId] = EquippedPfp({nft: nft, tokenId: tokenId});
+        emit PfpEquipped(impId, nft, tokenId);
+    }
+    
+    function clearPfp(uint256 impId) external {
+        if (ownerOf(impId) != msg.sender) revert NotImpOwner();
+        if (equippedPfps[impId].nft == address(0)) revert NoPfpEquipped();
+        
+        delete equippedPfps[impId];
+        emit PfpCleared(impId);
+    }
+    
     function getImp(uint256 impId) external view returns (
         int8 height,
         uint64 lastRoll,
@@ -402,6 +429,11 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
             roll.pending,
             roll.pending && block.number > roll.commitBlock + REVEAL_WINDOW
         );
+    }
+    
+    function getEquippedPfp(uint256 impId) external view returns (address nft, uint256 tokenId) {
+        EquippedPfp storage pfp = equippedPfps[impId];
+        return (pfp.nft, pfp.tokenId);
     }
     
     function canRoll(uint256 impId) external view returns (bool) {

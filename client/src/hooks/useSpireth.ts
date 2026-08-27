@@ -245,3 +245,50 @@ export function useClaim(impId: bigint) {
 
   return { claim, isPending, isConfirming, isSuccess, error, hash }
 }
+
+export function useEquippedPfp(impId: bigint) {
+  const address = useContractAddress()
+  return useReadContract({
+    address,
+    abi: TheSpirethABI,
+    functionName: 'getEquippedPfp',
+    args: [impId],
+    query: { refetchInterval: 5000 },
+  })
+}
+
+export function useEquipPfp(impId: bigint) {
+  const address = useContractAddress()
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+
+  const equipPfp = (nftAddress: `0x${string}`, tokenId: bigint) => {
+    if (!address) return
+    writeContract({
+      address,
+      abi: TheSpirethABI,
+      functionName: 'equipPfp',
+      args: [impId, nftAddress, tokenId],
+    })
+  }
+
+  return { equipPfp, isPending, isConfirming, isSuccess, error, hash }
+}
+
+export function useClearPfp(impId: bigint) {
+  const address = useContractAddress()
+  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+
+  const clearPfp = () => {
+    if (!address) return
+    writeContract({
+      address,
+      abi: TheSpirethABI,
+      functionName: 'clearPfp',
+      args: [impId],
+    })
+  }
+
+  return { clearPfp, isPending, isConfirming, isSuccess, error, hash }
+}

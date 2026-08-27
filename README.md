@@ -14,7 +14,17 @@ forge test
 
 ## Overview
 
-The Spireth is a competitive blockchain game where players mint Imps and roll dice daily to climb (or descend) a vertical board. The first Imp to reach the summit (+36) or abyss (-36) rings the bell and freezes the season. The top 50% of **living** Imps split the prize pool.
+The Spireth is a competitive blockchain game where players mint Imps and roll dice daily to climb (or descend) a vertical board. The first Imp to reach the summit (+25) or abyss (-25) rings the bell and freezes the season. The top 50% of **living** Imps split the prize pool.
+
+### Game Parameters
+- **Summit/Abyss:** ±25 floors
+- **Roll Cost:** $5 / 0.002 ETH
+- **Split:** 80% to prize pool, 20% to dev
+- **Imps per Wallet:** 1
+- **Commit-Reveal:** Yes (manipulation-resistant RNG)
+- **Time of Death:** 72 hours of inactivity
+- **Signup Duration:** 72 hours
+- **Max Season Duration:** 45 days
 
 ## Local Development (Windows/Git Bash)
 
@@ -95,6 +105,45 @@ Open http://127.0.0.1:3847 in your browser.
      --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
    ```
 4. During live season: Click "Roll" to commit, then "Reveal Roll" to complete
+
+### 9. Equip a Profile Picture (PFP)
+
+You can equip any NFT you own as your Imp's profile picture. The PFP will be displayed on the board for all players to see.
+
+**Requirements:**
+- You must own the Imp
+- You must own the NFT you want to equip
+- Both ownership checks happen at equip time
+- Equipping is free (no gas cost beyond the transaction)
+
+**To equip a PFP:**
+1. Select your Imp on the board
+2. In the Imp Panel, click "Equip PFP"
+3. Enter the NFT contract address and token ID
+4. Click "Equip NFT as PFP"
+
+**On Anvil (local development):**
+Since you may not have existing NFTs, you can paste any ERC721 contract address and token ID that your connected wallet owns.
+
+**Via CLI:**
+```bash
+# Equip a PFP
+cast send 0x5FbDB2315678afecb367f032d93F642f64180aa3 "equipPfp(uint256,address,uint256)" \
+  <IMP_ID> <NFT_CONTRACT> <TOKEN_ID> \
+  --rpc-url http://127.0.0.1:8545 \
+  --private-key <YOUR_PRIVATE_KEY>
+
+# Clear a PFP
+cast send 0x5FbDB2315678afecb367f032d93F642f64180aa3 "clearPfp(uint256)" \
+  <IMP_ID> \
+  --rpc-url http://127.0.0.1:8545 \
+  --private-key <YOUR_PRIVATE_KEY>
+```
+
+**Supported Image Formats:**
+- IPFS URLs (converted via public gateway)
+- HTTP/HTTPS URLs
+- Data URIs (data:image/...)
 
 ## License
 

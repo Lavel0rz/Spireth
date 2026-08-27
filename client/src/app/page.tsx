@@ -63,7 +63,7 @@ export default function Home() {
                   Climb the Ethereum Rhombus
                 </h2>
                 <p className="text-zinc-400 max-w-xl mx-auto">
-                  Roll the dice daily to move your Imp up or down. First to reach +36 (Summit) or -36 (Abyss) 
+                  Roll the dice daily to move your Imp up or down. First to reach +25 (Summit) or -25 (Abyss) 
                   rings the bell and freezes the season. Top 50% of living Imps split the prize pool.
                 </p>
               </div>
