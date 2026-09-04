@@ -5,12 +5,18 @@ import { useGameSprites } from '@/hooks/useGameSprites'
 import { useGameAnimation } from '@/context/GameAnimationContext'
 import {
   DIRECTION_ROW,
+  DISPLAY_SIZE,
   FLOOR_MAX,
   FLOOR_MIN,
+  PLATFORM_DRAW_H,
+  PLATFORM_TILE_SIZE,
+  PLATFORM_TILE_SRC_H,
+  PLATFORM_TILE_SRC_Y,
   SPRITE_SIZE,
   type Direction,
   type ImpData,
   floorWidth,
+  laneBounds,
   shortAddress,
   tintFromAddress,
   yForLevel,
@@ -21,8 +27,7 @@ const PADDING_TOP = 28
 const FLOOR_GAP = 11
 const MAX_PLATFORM_W = 360
 const MIN_PLATFORM_W = 72
-const SPRITE_SCALE = 2
-const DISPLAY_SIZE = SPRITE_SIZE * SPRITE_SCALE
+const FOOT_RATIO = 42 / SPRITE_SIZE
 const CANVAS_H = PADDING_TOP + (FLOOR_MAX - FLOOR_MIN) * FLOOR_GAP + 40
 
 type AnimState = 'walk' | 'commit' | 'revealPending' | 'jump' | 'dead'
@@ -53,6 +58,7 @@ interface CharacterEntity {
 function drawTintedFrame(
   ctx: CanvasRenderingContext2D,
   offscreen: HTMLCanvasElement,
+  outlineCanvas: HTMLCanvasElement,
   image: HTMLImageElement,
   sx: number,
   sy: number,
@@ -63,7 +69,8 @@ function drawTintedFrame(
   greyscale = false,
 ) {
   const offCtx = offscreen.getContext('2d')
-  if (!offCtx) return
+  const outlineCtx = outlineCanvas.getContext('2d')
+  if (!offCtx || !outlineCtx) return
 
   offCtx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
   offCtx.drawImage(image, sx, sy, SPRITE_SIZE, SPRITE_SIZE, 0, 0, SPRITE_SIZE, SPRITE_SIZE)
@@ -88,8 +95,75 @@ function drawTintedFrame(
   }
   offCtx.putImageData(imgData, 0, 0)
 
+  outlineCtx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
+  outlineCtx.drawImage(offscreen, 0, 0)
+  outlineCtx.globalCompositeOperation = 'source-in'
+  outlineCtx.fillStyle = 'rgba(0, 0, 0, 0.88)'
+  outlineCtx.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
+  outlineCtx.globalCompositeOperation = 'source-over'
+
   ctx.imageSmoothingEnabled = false
+  for (const [ox, oy] of [
+    [-1, 0],
+    [1, 0],
+    [0, -1],
+    [0, 1],
+  ] as const) {
+    ctx.drawImage(outlineCanvas, 0, 0, SPRITE_SIZE, SPRITE_SIZE, dx + ox, dy + oy, size, size)
+  }
   ctx.drawImage(offscreen, 0, 0, SPRITE_SIZE, SPRITE_SIZE, dx, dy, size, size)
+}
+
+function drawPlatformStrip(
+  ctx: CanvasRenderingContext2D,
+  tile: HTMLImageElement,
+  px: number,
+  y: number,
+  pw: number,
+  variant: 'grass' | 'stone' | 'hills',
+) {
+  ctx.imageSmoothingEnabled = false
+  const topY = y - PLATFORM_DRAW_H + 2
+
+  const source =
+    variant === 'stone'
+      ? { sx: 80, sy: 0, sw: 48, sh: 16 }
+      : variant === 'hills'
+        ? { sx: 0, sy: 0, sw: 48, sh: 16 }
+        : { sx: 0, sy: PLATFORM_TILE_SRC_Y, sw: PLATFORM_TILE_SIZE, sh: PLATFORM_TILE_SRC_H }
+
+  for (let tx = 0; tx < pw; tx += PLATFORM_TILE_SIZE) {
+    const drawW = Math.min(PLATFORM_TILE_SIZE, pw - tx)
+    ctx.drawImage(
+      tile,
+      source.sx,
+      source.sy,
+      Math.min(source.sw, drawW),
+      source.sh,
+      px + tx,
+      topY,
+      drawW,
+      PLATFORM_DRAW_H,
+    )
+  }
+}
+
+function platformTileForLevel(
+  level: number,
+  sprites: NonNullable<ReturnType<typeof useGameSprites>['sprites']>,
+): { tile: HTMLImageElement; variant: 'grass' | 'stone' | 'hills' } {
+  const isSummit = level === FLOOR_MAX
+  const isAbyss = level === FLOOR_MIN
+
+  if (isAbyss || level <= -18) return { tile: sprites.hills, variant: 'hills' }
+  if (isSummit || level >= 22) return { tile: sprites.grass, variant: 'grass' }
+  if (level === 0) return { tile: sprites.grass, variant: 'grass' }
+  return { tile: sprites.stone, variant: 'stone' }
+}
+
+function charYOnFloor(floorY: number, yOffset: number): number {
+  const platformTop = floorY - PLATFORM_DRAW_H + 2
+  return platformTop - DISPLAY_SIZE * FOOT_RATIO + yOffset
 }
 
 function buildJumpSteps(from: number, to: number): number[] {
@@ -99,6 +173,12 @@ function buildJumpSteps(from: number, to: number): number[] {
     steps.push(h)
   }
   return steps
+}
+
+function peersOnFloor(entities: Map<string, CharacterEntity>, height: number): string[] {
+  return [...entities.values()]
+    .filter((e) => Math.round(e.displayHeight) === height)
+    .map((e) => e.impId)
 }
 
 export function GameCanvas({
@@ -112,6 +192,7 @@ export function GameCanvas({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const offscreenRef = useRef<HTMLCanvasElement | null>(null)
+  const outlineRef = useRef<HTMLCanvasElement | null>(null)
   const entitiesRef = useRef<Map<string, CharacterEntity>>(new Map())
   const rafRef = useRef<number>(0)
   const lastTimeRef = useRef<number>(0)
@@ -135,6 +216,10 @@ export function GameCanvas({
       seen.add(key)
       const existing = map.get(key)
       const isSelected = selectedRef.current === imp.id
+      const peerIds = impsRef.current
+        .filter((i) => i.height === imp.height)
+        .map((i) => i.id.toString())
+      const lane = laneBounds(key, peerIds)
 
       if (!existing) {
         map.set(key, {
@@ -142,9 +227,9 @@ export function GameCanvas({
           owner: imp.owner,
           height: imp.height,
           displayHeight: imp.height,
-          floorX: 0.3 + (parseInt(key, 10) % 5) * 0.1,
-          direction: 1,
-          facing: 'right',
+          floorX: lane.center,
+          direction: parseInt(key, 10) % 2 === 0 ? 1 : -1,
+          facing: parseInt(key, 10) % 2 === 0 ? 'right' : 'left',
           animState: imp.isDead ? 'dead' : 'walk',
           frame: 0,
           frameTimer: 0,
@@ -167,6 +252,11 @@ export function GameCanvas({
         ) {
           existing.height = imp.height
           existing.displayHeight = imp.height
+          const newLane = laneBounds(
+            key,
+            impsRef.current.filter((i) => i.height === imp.height).map((i) => i.id.toString()),
+          )
+          existing.floorX = newLane.center
         } else if (existing.isDead !== imp.isDead) {
           existing.isDead = imp.isDead
           existing.animState = imp.isDead ? 'dead' : 'walk'
@@ -182,6 +272,7 @@ export function GameCanvas({
         }
         existing.isSelected = isSelected
         existing.owner = imp.owner
+        existing.tint = tintFromAddress(imp.owner)
       }
     }
 
@@ -236,6 +327,12 @@ export function GameCanvas({
       c.height = SPRITE_SIZE
       offscreenRef.current = c
     }
+    if (!outlineRef.current) {
+      const c = document.createElement('canvas')
+      c.width = SPRITE_SIZE
+      c.height = SPRITE_SIZE
+      outlineRef.current = c
+    }
 
     const canvas = canvasRef.current
     if (!canvas) return
@@ -251,15 +348,18 @@ export function GameCanvas({
         entity.frameTimer += dt
         entity.animTimer += dt
 
+        const floorHeight = Math.round(entity.displayHeight)
+        const lane = laneBounds(entity.impId, peersOnFloor(entitiesRef.current, floorHeight))
+
         if (entity.animState === 'walk' && !entity.isDead) {
-          const speed = 0.000035 * dt
+          const speed = 0.00003 * dt
           entity.floorX += speed * entity.direction
-          if (entity.floorX >= 0.88) {
-            entity.floorX = 0.88
+          if (entity.floorX >= lane.max) {
+            entity.floorX = lane.max
             entity.direction = -1
             entity.facing = 'left'
-          } else if (entity.floorX <= 0.12) {
-            entity.floorX = 0.12
+          } else if (entity.floorX <= lane.min) {
+            entity.floorX = lane.min
             entity.direction = 1
             entity.facing = 'right'
           }
@@ -286,10 +386,11 @@ export function GameCanvas({
           const stepDuration = 380
           entity.jumpProgress = Math.min(1, entity.animTimer / stepDuration)
           const t = entity.jumpProgress
-          const arc = Math.sin(t * Math.PI) * 18
-          const fromY = entity.jumpStepIndex === 0
-            ? entity.jumpFrom
-            : entity.jumpSteps[entity.jumpStepIndex - 1]
+          const arc = Math.sin(t * Math.PI) * 14
+          const fromY =
+            entity.jumpStepIndex === 0
+              ? entity.jumpFrom
+              : entity.jumpSteps[entity.jumpStepIndex - 1]
           const toH = entity.jumpSteps[entity.jumpStepIndex] ?? entity.jumpTo
           entity.displayHeight = fromY + (toH - fromY) * t
           entity.yOffset = -arc
@@ -306,11 +407,12 @@ export function GameCanvas({
             }
           }
         } else if (entity.isDead) {
-          entity.yOffset = 6
+          entity.yOffset = 4
           entity.frame = 0
         }
       }
 
+      ctx.imageSmoothingEnabled = false
       ctx.clearRect(0, 0, CANVAS_W, CANVAS_H)
 
       for (let level = FLOOR_MAX; level >= FLOOR_MIN; level--) {
@@ -321,39 +423,30 @@ export function GameCanvas({
         const isSummit = level === FLOOR_MAX
         const isAbyss = level === FLOOR_MIN
 
-        const tile =
-          isAbyss || level < -15
-            ? sprites.hills
-            : level < -5
-              ? sprites.stone
-              : sprites.grass
-        const fillY = tile === sprites.grass ? 64 : tile === sprites.stone ? 64 : 64
-        const fillH = 48
-        const fillW = 48
-        for (let tx = 0; tx < pw; tx += fillW) {
-          const drawW = Math.min(fillW, pw - tx)
-          ctx.drawImage(tile, 0, fillY, drawW, fillH, px + tx, y - 6, drawW, 12)
-        }
+        const { tile, variant } = platformTileForLevel(level, sprites)
+        drawPlatformStrip(ctx, tile, px, y, pw, variant)
 
-        if (level <= -20) {
+        if (level <= -22) {
+          ctx.imageSmoothingEnabled = false
+          const waterY = y + 4
           for (let tx = 0; tx < pw; tx += 16) {
-            ctx.drawImage(sprites.water, 0, 0, 16, sprites.water.height, px + tx, y + 8, 16, 6)
+            ctx.drawImage(sprites.water, 0, 0, 16, sprites.water.height, px + tx, waterY, 16, 5)
           }
         }
 
-        let borderColor = '#3f3f46'
+        let borderColor = '#52525b'
         if (isSummit) borderColor = '#34d399'
         else if (isAbyss) borderColor = '#f87171'
         else if (isCenter) borderColor = '#fbbf24'
 
         ctx.fillStyle = borderColor
-        ctx.fillRect(px, y + 5, pw, 2)
+        ctx.fillRect(px, y + 3, pw, 1)
 
         if (isSummit || isAbyss || isCenter || level % 6 === 0) {
           ctx.font = '10px monospace'
           ctx.fillStyle = isSummit ? '#34d399' : isAbyss ? '#f87171' : isCenter ? '#fbbf24' : '#71717a'
           ctx.textAlign = 'right'
-          ctx.fillText(level > 0 ? `+${level}` : `${level}`, px - 8, y + 8)
+          ctx.fillText(level > 0 ? `+${level}` : `${level}`, px - 8, y + 6)
         }
       }
 
@@ -366,7 +459,7 @@ export function GameCanvas({
         const px = (CANVAS_W - pw) / 2
         const floorY = yForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
         const charX = px + entity.floorX * pw - DISPLAY_SIZE / 2
-        const charY = floorY - DISPLAY_SIZE + 8 + entity.yOffset
+        const charY = charYOnFloor(floorY, entity.yOffset)
 
         const useActions =
           entity.animState === 'commit' ||
@@ -395,6 +488,7 @@ export function GameCanvas({
           drawTintedFrame(
             ctx,
             offscreenRef.current!,
+            outlineRef.current!,
             sprites.actions,
             actionCol * SPRITE_SIZE,
             actionRow * SPRITE_SIZE,
@@ -410,6 +504,7 @@ export function GameCanvas({
           drawTintedFrame(
             ctx,
             offscreenRef.current!,
+            outlineRef.current!,
             sprites.walk,
             col * SPRITE_SIZE,
             row * SPRITE_SIZE,
@@ -422,19 +517,26 @@ export function GameCanvas({
         }
 
         if (entity.isSelected) {
-          ctx.strokeStyle = '#a78bfa'
-          ctx.lineWidth = 2
-          ctx.strokeRect(charX - 2, charY - 2, DISPLAY_SIZE + 4, DISPLAY_SIZE + 4)
+          ctx.imageSmoothingEnabled = false
+          ctx.strokeStyle = 'rgba(196, 181, 253, 0.95)'
+          ctx.lineWidth = 1
+          ctx.shadowColor = 'rgba(167, 139, 250, 0.7)'
+          ctx.shadowBlur = 6
+          ctx.strokeRect(charX + 0.5, charY + 0.5, DISPLAY_SIZE - 1, DISPLAY_SIZE - 1)
+          ctx.shadowBlur = 0
         }
 
         if (entity.isSelected || entity.isDead) {
           ctx.font = '9px monospace'
-          ctx.fillStyle = entity.isDead ? '#71717a' : '#e4e4e7'
           ctx.textAlign = 'center'
           const label = entity.isSelected
             ? `#${entity.impId} ${shortAddress(entity.owner)}`
             : `#${entity.impId}`
-          ctx.fillText(label, charX + DISPLAY_SIZE / 2, charY - 4)
+          const labelY = charY - 5
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.65)'
+          ctx.fillText(label, charX + DISPLAY_SIZE / 2 + 1, labelY + 1)
+          ctx.fillStyle = entity.isDead ? '#a1a1aa' : '#f4f4f5'
+          ctx.fillText(label, charX + DISPLAY_SIZE / 2, labelY)
         }
       }
 
@@ -470,11 +572,11 @@ export function GameCanvas({
       const px = (CANVAS_W - pw) / 2
       const floorY = yForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
       const charX = px + entity.floorX * pw
-      const charY = floorY - DISPLAY_SIZE / 2 + 8
+      const charY = charYOnFloor(floorY, 0) + DISPLAY_SIZE / 2
       const dx = x - charX
       const dy = y - charY
       const dist = Math.sqrt(dx * dx + dy * dy)
-      if (dist < DISPLAY_SIZE && (!closest || dist < closest.dist)) {
+      if (dist < DISPLAY_SIZE * 0.65 && (!closest || dist < closest.dist)) {
         closest = { id: entity.impId, dist }
       }
     }
