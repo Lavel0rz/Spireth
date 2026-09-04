@@ -47,11 +47,39 @@ const CANVAS_H = BOARD_CANVAS_H
 const CENTER_X = CANVAS_W / 2
 const HIT_RADIUS_RATIO = 0.65
 const CROWDED_FLOOR_THRESHOLD = 4
+const LARGE_SIM_THRESHOLD = 200
 const CROWDED_SPRITE_SCALE = 0.88
 const JUMP_ARC_HEIGHT = 7
 const COMMIT_BOUNCE = { dip: 1, peak: -5, settle: -2 } as const
 const BILLBOARD_PLATFORM_H = 20
 const BILLBOARD_STRIP_H = 16
+
+const textWidthCache = new Map<string, number>()
+const tintedSpriteCache = new Map<string, HTMLCanvasElement>()
+const MAX_TINTED_CACHE_SIZE = 2000
+
+function getCachedTextWidth(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  font: string,
+): number {
+  const key = `${font}|${text}`
+  let width = textWidthCache.get(key)
+  if (width === undefined) {
+    ctx.font = font
+    width = ctx.measureText(text).width
+    textWidthCache.set(key, width)
+  }
+  return width
+}
+
+function getTintedFrameCacheKey(
+  frame: PepeFrame,
+  tint: [number, number, number],
+  greyscale: boolean,
+): string {
+  return `${frame.col}|${frame.row}|${frame.flipX ? 1 : 0}|${tint[0]}|${tint[1]}|${tint[2]}|${greyscale ? 1 : 0}`
+}
 
 type AnimState = 'walk' | 'commit' | 'revealPending' | 'jump' | 'dead'
 
@@ -85,22 +113,16 @@ export interface GameCanvasDisplayMetrics {
   fitScale: number
 }
 
-function drawTintedFrame(
-  ctx: CanvasRenderingContext2D,
+function createTintedFrame(
   offscreen: HTMLCanvasElement,
   outlineCanvas: HTMLCanvasElement,
   image: HTMLImageElement,
   frame: PepeFrame,
-  dx: number,
-  dy: number,
-  drawW: number,
-  drawH: number,
   tint: [number, number, number],
-  greyscale = false,
-) {
-  const offCtx = offscreen.getContext('2d')
-  const outlineCtx = outlineCanvas.getContext('2d')
-  if (!offCtx || !outlineCtx) return
+  greyscale: boolean,
+): HTMLCanvasElement {
+  const offCtx = offscreen.getContext('2d')!
+  const outlineCtx = outlineCanvas.getContext('2d')!
 
   const { col, row, flipX } = frame
   const sx = col * FRAME_W
@@ -146,16 +168,55 @@ function drawTintedFrame(
   outlineCtx.fillRect(0, 0, FRAME_W, FRAME_H)
   outlineCtx.globalCompositeOperation = 'source-over'
 
-  ctx.imageSmoothingEnabled = false
+  const cachedCanvas = document.createElement('canvas')
+  cachedCanvas.width = FRAME_W + 2
+  cachedCanvas.height = FRAME_H + 2
+  const cachedCtx = cachedCanvas.getContext('2d')!
+  cachedCtx.imageSmoothingEnabled = false
   for (const [ox, oy] of [
-    [-1, 0],
-    [1, 0],
-    [0, -1],
     [0, 1],
+    [2, 1],
+    [1, 0],
+    [1, 2],
   ] as const) {
-    ctx.drawImage(outlineCanvas, 0, 0, FRAME_W, FRAME_H, dx + ox, dy + oy, drawW, drawH)
+    cachedCtx.drawImage(outlineCanvas, ox, oy)
   }
-  ctx.drawImage(offscreen, 0, 0, FRAME_W, FRAME_H, dx, dy, drawW, drawH)
+  cachedCtx.drawImage(offscreen, 1, 1)
+
+  return cachedCanvas
+}
+
+function drawTintedFrame(
+  ctx: CanvasRenderingContext2D,
+  offscreen: HTMLCanvasElement,
+  outlineCanvas: HTMLCanvasElement,
+  image: HTMLImageElement,
+  frame: PepeFrame,
+  dx: number,
+  dy: number,
+  drawW: number,
+  drawH: number,
+  tint: [number, number, number],
+  greyscale = false,
+) {
+  const offCtx = offscreen.getContext('2d')
+  const outlineCtx = outlineCanvas.getContext('2d')
+  if (!offCtx || !outlineCtx) return
+
+  const cacheKey = getTintedFrameCacheKey(frame, tint, greyscale)
+  let cachedFrame = tintedSpriteCache.get(cacheKey)
+
+  if (!cachedFrame) {
+    if (tintedSpriteCache.size >= MAX_TINTED_CACHE_SIZE) {
+      const firstKey = tintedSpriteCache.keys().next().value
+      if (firstKey) tintedSpriteCache.delete(firstKey)
+    }
+    cachedFrame = createTintedFrame(offscreen, outlineCanvas, image, frame, tint, greyscale)
+    tintedSpriteCache.set(cacheKey, cachedFrame)
+  }
+
+  ctx.imageSmoothingEnabled = false
+  ctx.drawImage(cachedFrame, 0, 0, FRAME_W + 2, FRAME_H + 2, dx - 1, dy - 1, drawW + 2, drawH + 2)
 }
 
 function drawPlatformStrip(
@@ -275,11 +336,12 @@ function drawIdBadge(
   const labelX = charX + drawW / 2
   const labelY = charY - 3
 
-  ctx.font = '8px monospace'
+  const font = '8px monospace'
+  const textWidth = getCachedTextWidth(ctx, label, font)
+  ctx.font = font
   ctx.textAlign = 'center'
-  const metrics = ctx.measureText(label)
   const padX = 2
-  const boxW = metrics.width + padX * 2
+  const boxW = textWidth + padX * 2
   const boxH = 9
   const boxX = labelX - boxW / 2
   const boxY = labelY - boxH + 1
@@ -308,11 +370,12 @@ function drawDiceBadge(
   const labelX = charX + drawW / 2
   const labelY = charY - 14
 
-  ctx.font = 'bold 7px monospace'
+  const font = 'bold 7px monospace'
+  const textWidth = getCachedTextWidth(ctx, label, font)
+  ctx.font = font
   ctx.textAlign = 'center'
-  const metrics = ctx.measureText(label)
   const padX = 2
-  const boxW = metrics.width + padX * 2
+  const boxW = textWidth + padX * 2
   const boxH = 8
   const boxX = labelX - boxW / 2
   const boxY = labelY - boxH + 1
@@ -686,6 +749,9 @@ export function GameCanvas({
         (a, b) => a.displayHeight - b.displayHeight,
       )
 
+      const totalEntities = sorted.length
+      const isLargeSim = totalEntities >= LARGE_SIM_THRESHOLD
+
       for (const entity of sorted) {
         const floorHeight = Math.round(entity.displayHeight)
         const peerCount = floorPeerCounts.get(floorHeight) ?? 1
@@ -734,21 +800,25 @@ export function GameCanvas({
           ctx.shadowBlur = 0
         }
 
-        drawIdBadge(
-          ctx,
-          charX,
-          charY,
-          drawW,
-          entity.impId,
-          entity.owner,
-          entity.isSelected,
-          entity.isDead,
-        )
+        const showIdBadge = entity.isSelected || !isLargeSim
+        if (showIdBadge) {
+          drawIdBadge(
+            ctx,
+            charX,
+            charY,
+            drawW,
+            entity.impId,
+            entity.owner,
+            entity.isSelected,
+            entity.isDead,
+          )
+        }
 
         const showDice =
           entity.dice !== null &&
           (entity.animState === 'jump' || Date.now() < entity.diceShowUntil)
-        if (showDice) {
+        const showDiceBadge = showDice && (entity.isSelected || !isLargeSim)
+        if (showDiceBadge) {
           drawDiceBadge(ctx, charX, charY, drawW, entity.dice!)
         }
       }

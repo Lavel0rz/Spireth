@@ -6,7 +6,7 @@ import { useGameAnimation } from '@/context/GameAnimationContext'
 import { FLOOR_MAX, FLOOR_MIN, jumpDurationMs, type ImpData } from '@/lib/gameUtils'
 
 const FOUNDRY_CHAIN_ID = 31337
-const SIM_IMP_COUNT = 100
+const SIM_IMP_COUNT = 1000
 const SIM_TICK_MS = 2000
 const SIM_FIRST_TICK_MS = 1000
 const SIM_JUMP_STAGGER_MAX_MS = 300
