@@ -10,19 +10,21 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  * @title The Spireth - Season 1
  * @notice A finite onchain race on Base. Imps climb an Ethereum-rhombus board.
  * 
- * RNG Design (Commit-Reveal):
+ * RNG Design (Commit-Reveal with RANDAO-style delay):
  * To ensure fair dice rolls without requiring external VRF:
  * 1. Player calls commitRoll(commitment) with ETH payment
  *    - commitment = keccak256(abi.encodePacked(secret, impId))
- * 2. After 1+ blocks, player calls revealRoll(secret)
- *    - Dice derived from: hash(secret, blockhash of commit block + 1)
- *    - Player commits before seeing the future blockhash, so can't manipulate
- * 3. If not revealed within 256 blocks, roll is forfeited (ETH stays in pool)
+ * 2. After REVEAL_DELAY blocks (~3), player calls revealRoll(secret)
+ *    - Dice derived from: hash(secret, blockhashes at commit+3, +2, +1, impId)
+ *    - Multiple blockhashes mixed for stronger entropy
+ *    - Player commits before seeing the future blockhashes, so can't manipulate
+ * 3. If not revealed within REVEAL_WINDOW (256) blocks, roll is forfeited (ETH stays in pool)
  * 
  * This design is manipulation-resistant because:
- * - Player commits their secret before the determining blockhash exists
+ * - Player commits their secret before the determining blockhashes exist
  * - Player cannot change their secret after committing
  * - Block producers cannot know the player's secret when producing the block
+ * - REVEAL_DELAY of 3 blocks reduces single-block validator bias
  */
 contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     int8 public constant SUMMIT = 50;
@@ -32,6 +34,7 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     uint256 public constant ROLL_COOLDOWN = 24 hours;
     uint256 public constant DEATH_THRESHOLD = 72 hours;
     uint256 public constant REVEAL_WINDOW = 256;
+    uint256 public constant REVEAL_DELAY = 3;
     
     enum SeasonState { Signup, Live, Frozen }
     
@@ -205,16 +208,17 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         PendingRoll storage pending = pendingRolls[impId];
         if (!pending.pending) revert NoPendingRoll();
         
-        if (block.number <= pending.commitBlock) revert RevealTooEarly();
+        if (block.number <= pending.commitBlock + REVEAL_DELAY) revert RevealTooEarly();
         
         if (block.number > pending.commitBlock + REVEAL_WINDOW) revert RevealWindowExpired();
         
         bytes32 expectedCommitment = keccak256(abi.encodePacked(secret, impId));
         if (pending.commitment != expectedCommitment) revert InvalidCommitment();
         
-        bytes32 blockHash = blockhash(pending.commitBlock + 1);
-        
-        uint256 rand = uint256(keccak256(abi.encodePacked(secret, blockHash, impId)));
+        bytes32 h1 = blockhash(pending.commitBlock + REVEAL_DELAY);
+        bytes32 h2 = blockhash(pending.commitBlock + REVEAL_DELAY - 1);
+        bytes32 h3 = blockhash(pending.commitBlock + REVEAL_DELAY - 2);
+        uint256 rand = uint256(keccak256(abi.encodePacked(secret, h1, h2, h3, impId)));
         int8 dice = _randToDice(rand);
         
         pending.pending = false;
@@ -444,6 +448,14 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         if (block.timestamp > imp.lastActivity + DEATH_THRESHOLD) return false;
         if (imp.lastRoll != 0 && block.timestamp < imp.lastRoll + ROLL_COOLDOWN) return false;
         
+        return true;
+    }
+    
+    function canReveal(uint256 impId) external view returns (bool) {
+        PendingRoll storage roll = pendingRolls[impId];
+        if (!roll.pending) return false;
+        if (block.number <= roll.commitBlock + REVEAL_DELAY) return false;
+        if (block.number > roll.commitBlock + REVEAL_WINDOW) return false;
         return true;
     }
     

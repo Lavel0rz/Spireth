@@ -80,11 +80,42 @@ contract TheSpirethTest is Test {
         bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
         vm.prank(alice);
         spireth.commitRoll{value: ROLL_COST}(0, commitment);
-        vm.roll(block.number + 2);
+        vm.roll(block.number + spireth.REVEAL_DELAY() + 1);
         vm.prank(alice);
         spireth.revealRoll(0, secret);
         (int8 height, , , , , ) = spireth.getImp(0);
         assertTrue(height >= -4 && height <= 4 && height != 0);
+    }
+
+    function test_RevealTooEarlyWithDelay() public {
+        _setupLiveSeason();
+        uint256 secret = 12345;
+        bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
+        vm.prank(alice);
+        spireth.commitRoll{value: ROLL_COST}(0, commitment);
+        vm.roll(block.number + spireth.REVEAL_DELAY());
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.RevealTooEarly.selector);
+        spireth.revealRoll(0, secret);
+    }
+
+    function test_CanRevealView() public {
+        _setupLiveSeason();
+        uint256 secret = 12345;
+        bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
+        
+        assertFalse(spireth.canReveal(0));
+        
+        vm.prank(alice);
+        spireth.commitRoll{value: ROLL_COST}(0, commitment);
+        
+        assertFalse(spireth.canReveal(0));
+        
+        vm.roll(block.number + spireth.REVEAL_DELAY());
+        assertFalse(spireth.canReveal(0));
+        
+        vm.roll(block.number + 1);
+        assertTrue(spireth.canReveal(0));
     }
 
     function test_CommitRollSplits80_20() public {
@@ -143,7 +174,7 @@ contract TheSpirethTest is Test {
             bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
             vm.prank(alice);
             spireth.commitRoll{value: ROLL_COST}(0, commitment);
-            vm.roll(block.number + 2);
+            vm.roll(block.number + spireth.REVEAL_DELAY() + 1);
             vm.prank(alice);
             spireth.revealRoll(0, secret);
             
@@ -176,7 +207,7 @@ contract TheSpirethTest is Test {
             bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
             vm.prank(alice);
             spireth.commitRoll{value: ROLL_COST}(0, commitment);
-            vm.roll(block.number + 2);
+            vm.roll(block.number + spireth.REVEAL_DELAY() + 1);
             vm.prank(alice);
             spireth.revealRoll(0, secret);
             
