@@ -89,7 +89,7 @@ export function SimSummaryModal({
           Pepe #{summary.winnerId.toString()} earns {formatUsd(summary.bellBonusUsd)} (
           {BELL_BONUS_PCT}% of pool). Remaining {formatUsd(summary.remainingPoolUsd)} distributed
           rank-weighted to top {Math.ceil(summary.livingAtEnd / 2)} of {summary.livingAtEnd} living
-          Pepes (bottom half + dead get $0 ranking pay).
+          Pepes by absolute floor rank (bottom half + dead get $0 ranking pay).
         </div>
 
         <div className="mb-5">

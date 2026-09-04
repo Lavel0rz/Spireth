@@ -103,7 +103,6 @@ function buildSummary(
   const remainingPoolUsd = poolUsd - bellBonusUsd
 
   const livingImps = imps.filter((imp) => !imp.isDead)
-  const isSummit = outcome === 'summit'
 
   const rankedLiving = livingImps
     .map((imp) => ({
@@ -111,8 +110,9 @@ function buildSummary(
       height: heights.get(imp.id.toString()) ?? imp.height,
     }))
     .sort((a, b) => {
-      const cmp = isSummit ? b.height - a.height : a.height - b.height
-      if (cmp !== 0) return cmp
+      const absA = Math.abs(a.height)
+      const absB = Math.abs(b.height)
+      if (absB !== absA) return absB - absA
       return a.imp.id < b.imp.id ? -1 : a.imp.id > b.imp.id ? 1 : 0
     })
 
