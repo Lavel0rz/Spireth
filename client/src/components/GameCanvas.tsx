@@ -51,7 +51,6 @@ const CROWDED_SPRITE_SCALE = 0.88
 const JUMP_ARC_HEIGHT = 7
 const COMMIT_BOUNCE = { dip: 1, peak: -5, settle: -2 } as const
 const BILLBOARD_PLATFORM_H = 20
-const BILLBOARD_STRIP_H = 16
 
 type AnimState = 'walk' | 'commit' | 'revealPending' | 'jump' | 'dead'
 
@@ -604,14 +603,11 @@ export function GameCanvas({
         const { tile, variant } = platformTileForLevel(level, sprites)
         
         if (isCenter) {
-          const billboardY = y - BILLBOARD_STRIP_H + PLATFORM_DRAW_H
-          const stripTopY = billboardY - PLATFORM_DRAW_H + 2
-          const stripHeight = BILLBOARD_PLATFORM_H
-          
+          const stripTopY = y - PLATFORM_DRAW_H + 2
           ctx.imageSmoothingEnabled = false
           ctx.save()
           ctx.beginPath()
-          ctx.rect(px, stripTopY, pw, stripHeight)
+          ctx.rect(px, stripTopY, pw, BILLBOARD_PLATFORM_H)
           ctx.clip()
           for (let tx = 0; tx < pw; tx += PLATFORM_TILE_SIZE) {
             const drawW = Math.min(PLATFORM_TILE_SIZE, pw - tx)
@@ -624,39 +620,10 @@ export function GameCanvas({
               px + tx,
               stripTopY,
               drawW,
-              stripHeight,
+              BILLBOARD_PLATFORM_H,
             )
           }
           ctx.restore()
-          
-          const bb = billboardRef.current
-          if (bb && bb.url) {
-            ctx.save()
-            ctx.beginPath()
-            ctx.rect(px, stripTopY, pw, stripHeight)
-            ctx.clip()
-            
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
-            ctx.fillRect(px, stripTopY, pw, stripHeight)
-            
-            ctx.font = 'bold 10px sans-serif'
-            ctx.textAlign = 'center'
-            ctx.textBaseline = 'middle'
-            ctx.fillStyle = '#fde68a'
-            
-            let labelText = bb.label
-            const maxTextWidth = pw - 20
-            while (ctx.measureText(labelText).width > maxTextWidth && labelText.length > 3) {
-              labelText = labelText.slice(0, -4) + '...'
-            }
-            
-            const centerY = stripTopY + stripHeight / 2
-            ctx.fillText(labelText, CENTER_X, centerY)
-            ctx.restore()
-          }
-          
-          ctx.fillStyle = '#fbbf24'
-          ctx.fillRect(px, stripTopY + stripHeight - 1, pw, 2)
         } else {
           drawPlatformStrip(ctx, tile, px, y, pw, variant)
         }
@@ -763,6 +730,49 @@ export function GameCanvas({
         }
       }
 
+      // Draw billboard ad panel AFTER pepes so label is never buried
+      const bb = billboardRef.current
+      const floor0Y = yForLevel(0, PADDING_TOP, FLOOR_GAP)
+      const floor0Pw = floorWidth(0, MAX_PLATFORM_W, MIN_PLATFORM_W)
+      const floor0Px = CENTER_X - floor0Pw / 2
+      const stripTopY = floor0Y - PLATFORM_DRAW_H + 2
+
+      ctx.save()
+      ctx.imageSmoothingEnabled = false
+
+      // Dark brown/amber panel fill matching the strip geometry
+      ctx.fillStyle = '#3d2a1a'
+      ctx.fillRect(floor0Px, stripTopY, floor0Pw, BILLBOARD_PLATFORM_H)
+
+      // Amber border
+      ctx.strokeStyle = '#fbbf24'
+      ctx.lineWidth = 1
+      ctx.strokeRect(floor0Px + 0.5, stripTopY + 0.5, floor0Pw - 1, BILLBOARD_PLATFORM_H - 1)
+
+      if (bb && bb.url && bb.label) {
+        // Pixel-friendly monospace font
+        ctx.font = 'bold 10px monospace'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+
+        // Truncate with ellipsis if too wide
+        const maxTextWidth = floor0Pw - 16
+        let labelText = bb.label
+        let metrics = ctx.measureText(labelText)
+        if (metrics.width > maxTextWidth) {
+          while (labelText.length > 3 && ctx.measureText(labelText + '...').width > maxTextWidth) {
+            labelText = labelText.slice(0, -1)
+          }
+          labelText = labelText + '...'
+        }
+
+        // Amber text for high contrast on dark panel
+        ctx.fillStyle = '#fbbf24'
+        ctx.fillText(labelText, CENTER_X, stripTopY + BILLBOARD_PLATFORM_H / 2)
+      }
+
+      ctx.restore()
+
       rafRef.current = requestAnimationFrame(tick)
     }
 
@@ -800,11 +810,9 @@ export function GameCanvas({
       const floor0Y = yForLevel(0, PADDING_TOP, FLOOR_GAP)
       const floor0Pw = floorWidth(0, MAX_PLATFORM_W, MIN_PLATFORM_W)
       const floor0Px = CENTER_X - floor0Pw / 2
-      const billboardY = floor0Y - BILLBOARD_STRIP_H + PLATFORM_DRAW_H
-      const stripTopY = billboardY - PLATFORM_DRAW_H + 2
-      const stripHeight = BILLBOARD_PLATFORM_H
+      const stripTopY = floor0Y - PLATFORM_DRAW_H + 2
       
-      if (x >= floor0Px && x <= floor0Px + floor0Pw && y >= stripTopY && y <= stripTopY + stripHeight) {
+      if (x >= floor0Px && x <= floor0Px + floor0Pw && y >= stripTopY && y <= stripTopY + BILLBOARD_PLATFORM_H) {
         window.open(bb.url, '_blank', 'noopener,noreferrer')
         return
       }
