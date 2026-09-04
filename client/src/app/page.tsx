@@ -6,33 +6,18 @@ import { WalletConnect } from '@/components/WalletConnect'
 import { SeasonInfo } from '@/components/SeasonInfo'
 import { Board } from '@/components/Board'
 import { ImpPanel } from '@/components/ImpPanel'
-import { useHasMinted, useTotalMinted } from '@/hooks/useSpireth'
+import { useOwnedImpId } from '@/hooks/useSpireth'
 
 export default function Home() {
   const { address } = useAccount()
-  const { data: hasMinted } = useHasMinted(address)
-  const { data: totalMinted } = useTotalMinted()
+  const { data: ownedImpId } = useOwnedImpId(address)
   const [selectedImpId, setSelectedImpId] = useState<bigint | null>(null)
 
   useEffect(() => {
-    if (hasMinted && address && totalMinted !== undefined) {
-      const checkOwnership = async () => {
-        for (let i = 0; i < Number(totalMinted); i++) {
-          try {
-            const res = await fetch(`/api/imp/${i}`)
-            const data = await res.json()
-            if (data.owner?.toLowerCase() === address.toLowerCase()) {
-              setSelectedImpId(BigInt(i))
-              break
-            }
-          } catch (e) {
-            console.error('Error checking imp ownership:', e)
-          }
-        }
-      }
-      checkOwnership()
+    if (ownedImpId !== undefined && ownedImpId !== null) {
+      setSelectedImpId(ownedImpId)
     }
-  }, [hasMinted, address, totalMinted])
+  }, [ownedImpId])
 
   return (
     <div className="min-h-screen">
