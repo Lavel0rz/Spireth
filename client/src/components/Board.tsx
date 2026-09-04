@@ -10,6 +10,7 @@ import {
   rhombusYFraction,
   type ImpData,
 } from '@/lib/gameUtils'
+import { useIsDevPlaytest, useSimulateCompetition } from '@/hooks/useSimulateCompetition'
 
 export function Board({
   selectedImpId,
@@ -20,17 +21,21 @@ export function Board({
 }) {
   useSpirethEvents()
   const { data: totalMinted } = useTotalMinted()
-  const [imps, setImps] = useState<ImpData[]>([])
+  const [realImps, setRealImps] = useState<ImpData[]>([])
   const [canvasMetrics, setCanvasMetrics] = useState<GameCanvasDisplayMetrics | null>(null)
+  const isDevPlaytest = useIsDevPlaytest()
+  const { active: simActive, simImps, toggle: toggleSimulation } = useSimulateCompetition()
 
   const total = totalMinted !== undefined ? Number(totalMinted) : 0
 
   useEffect(() => {
+    if (simActive) return
+
     let cancelled = false
 
     if (total === 0) {
       const timer = window.setTimeout(() => {
-        if (!cancelled) setImps([])
+        if (!cancelled) setRealImps([])
       }, 0)
       return () => {
         cancelled = true
@@ -51,7 +56,7 @@ export function Board({
         isDead: imp.isDead,
         owner: imp.owner,
       }))
-      if (!cancelled) setImps(validImps)
+      if (!cancelled) setRealImps(validImps)
     }
 
     fetchImps()
@@ -60,8 +65,9 @@ export function Board({
       cancelled = true
       clearInterval(interval)
     }
-  }, [total])
+  }, [total, simActive])
 
+  const imps = simActive ? simImps : realImps
   const livingCount = useMemo(() => imps.filter((i) => !i.isDead).length, [imps])
   const deadCount = imps.length - livingCount
 
@@ -74,21 +80,35 @@ export function Board({
   const meterHeight = canvasMetrics?.displayHeight ?? undefined
 
   return (
-    <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-4">
-      <div className="mb-3 flex items-baseline gap-3 flex-wrap">
-        <h2 className="text-lg font-semibold text-zinc-200 flex items-center gap-2">
-          <span className="text-xl">⬥</span>
+    <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-3 flex flex-col flex-1 min-h-0 h-full">
+      <div className="mb-2 flex items-center gap-3 flex-wrap shrink-0">
+        <h2 className="text-base font-semibold text-zinc-200 flex items-center gap-2">
+          <span className="text-lg">⬥</span>
           The Spireth
         </h2>
-        <p className="text-sm text-zinc-500">Climb the Ethereum Rhombus</p>
+        <p className="text-xs text-zinc-500">Climb the Ethereum Rhombus</p>
         {imps.length > 0 && (
           <span className="text-xs text-zinc-500 ml-auto">
             {livingCount} living · {deadCount} fallen
+            {simActive ? ' · sim' : ''}
           </span>
+        )}
+        {isDevPlaytest && (
+          <button
+            type="button"
+            onClick={toggleSimulation}
+            className={`text-xs px-2 py-1 rounded border transition-colors ${
+              simActive
+                ? 'border-amber-700/60 bg-amber-950/40 text-amber-300 hover:bg-amber-900/40'
+                : 'border-zinc-700 bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-300'
+            }`}
+          >
+            {simActive ? 'Stop simulation' : 'Simulate competition'}
+          </button>
         )}
       </div>
 
-      <div className="flex gap-1">
+      <div className="flex gap-1 flex-1 min-h-0">
         <div
           className="relative shrink-0 w-6"
           style={{ height: meterHeight }}
@@ -113,7 +133,7 @@ export function Board({
           />
         </div>
 
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 min-h-0 relative rounded-lg bg-zinc-950/40 overflow-hidden">
           <GameCanvas
             imps={imps}
             selectedImpId={selectedImpId}
@@ -123,7 +143,7 @@ export function Board({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap justify-center gap-4 text-xs text-zinc-500">
+      <div className="mt-2 flex flex-wrap justify-center gap-3 text-[11px] text-zinc-500 shrink-0">
         <div className="flex items-center gap-1">
           <div className="w-3 h-3 bg-[#b8e0b0] border border-zinc-600" style={{ imageRendering: 'pixelated' }} />
           <span>Living</span>
@@ -137,7 +157,7 @@ export function Board({
           <span>Selected</span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-zinc-400">Click a Pepe to select · scroll to zoom · drag to pan</span>
+          <span className="text-zinc-400">Click a Pepe to select</span>
         </div>
       </div>
     </div>

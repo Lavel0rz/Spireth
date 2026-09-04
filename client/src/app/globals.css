@@ -7,12 +7,21 @@
 
 html {
   color-scheme: dark;
+  height: 100%;
+  overflow: hidden;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, sans-serif;
+  height: 100%;
+  overflow: hidden;
+}
+
+#__next,
+body > div {
+  height: 100%;
 }
 
 @layer utilities {

@@ -23,35 +23,35 @@ export default function Home() {
   }, [hasMinted, ownedImpId])
 
   return (
-    <div className="min-h-screen">
+    <div className="h-full flex flex-col overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-violet-900/20 via-zinc-900 to-zinc-950 -z-10" />
-      
-      <header className="border-b border-zinc-800/50 backdrop-blur-sm sticky top-0 z-50">
-        <div className="max-w-[90rem] mx-auto px-4 py-4 flex justify-between items-center">
+
+      <header className="shrink-0 border-b border-zinc-800/50 backdrop-blur-sm z-50">
+        <div className="max-w-[90rem] mx-auto px-4 py-2 flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="relative">
-              <div className="w-10 h-10 bg-gradient-to-br from-violet-500 to-indigo-600 rotate-45 rounded-sm" />
-              <div className="absolute inset-0 w-10 h-10 bg-gradient-to-br from-violet-400 to-indigo-500 rotate-45 rounded-sm opacity-50 blur-sm" />
+              <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-indigo-600 rotate-45 rounded-sm" />
+              <div className="absolute inset-0 w-8 h-8 bg-gradient-to-br from-violet-400 to-indigo-500 rotate-45 rounded-sm opacity-50 blur-sm" />
             </div>
             <div>
-              <h1 className="text-xl font-bold tracking-tight">The Spireth</h1>
-              <p className="text-xs text-zinc-500">Season 1</p>
+              <h1 className="text-lg font-bold tracking-tight">The Spireth</h1>
+              <p className="text-[10px] text-zinc-500">Season 1</p>
             </div>
           </div>
           <WalletConnect />
         </div>
       </header>
 
-      <main className="max-w-[90rem] mx-auto px-4 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-9">
+      <main className="flex-1 min-h-0 max-w-[90rem] w-full mx-auto px-4 py-3">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-full min-h-0">
+          <div className="lg:col-span-9 flex flex-col min-h-0 h-full">
             <Board
               selectedImpId={selectedImpId}
               onSelectImp={setSelectedImpId}
             />
           </div>
 
-          <div className="lg:col-span-3 space-y-4">
+          <div className="lg:col-span-3 flex flex-col min-h-0 h-full overflow-y-auto space-y-3 pr-1">
             <SeasonInfo />
             <RuleChips />
             <Leaderboard
@@ -59,8 +59,8 @@ export default function Home() {
               onSelectImp={setSelectedImpId}
             />
             <ImpPanel impId={selectedImpId} />
-            
-            <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-4">
+
+            <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-4 shrink-0">
               <h3 className="text-sm font-semibold text-zinc-400 mb-3">Quick Rules</h3>
               <ul className="space-y-2 text-sm text-zinc-500">
                 <li className="flex gap-2">
@@ -88,12 +88,6 @@ export default function Home() {
           </div>
         </div>
       </main>
-
-      <footer className="border-t border-zinc-800/50 mt-8">
-        <div className="max-w-[90rem] mx-auto px-4 py-6 text-center text-sm text-zinc-500">
-          <p>The Spireth · Season 1 · Built on Base</p>
-        </div>
-      </footer>
     </div>
   )
 }
