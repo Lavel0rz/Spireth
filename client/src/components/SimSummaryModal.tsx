@@ -2,6 +2,7 @@
 
 import type { SimSummary } from '@/hooks/useSimulateCompetition'
 import { BELL_BONUS_PCT } from '@/hooks/useSimulateCompetition'
+import { FLOOR_MAX, FLOOR_MIN } from '@/lib/gameUtils'
 
 function formatUsd(amount: number): string {
   return amount.toLocaleString('en-US', {
@@ -30,7 +31,7 @@ export function SimSummaryModal({
   onRunAgain: () => void
 }) {
   const isSummit = summary.outcome === 'summit'
-  const outcomeLabel = isSummit ? 'Summit (+25)' : 'Abyss (-25)'
+  const outcomeLabel = isSummit ? `Summit (+${FLOOR_MAX})` : `Abyss (${FLOOR_MIN})`
 
   return (
     <div className="absolute inset-0 z-30 flex items-center justify-center bg-zinc-950/70 backdrop-blur-sm p-4">

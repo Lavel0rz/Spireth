@@ -4,6 +4,7 @@ import { useAccount } from 'wagmi'
 import { useOwnedImpId } from '@/hooks/useSpireth'
 import { useLeaderboard } from '@/hooks/useLeaderboard'
 import { formatFloorLabel } from '@/lib/leaderboardUtils'
+import { FLOOR_MAX, FLOOR_MIN } from '@/lib/gameUtils'
 
 export function Leaderboard({
   selectedImpId,
@@ -23,7 +24,7 @@ export function Leaderboard({
         Leaderboard
       </h2>
       <p className="text-xs text-zinc-500 mb-4">
-        Ranked by |floor| toward Summit/Abyss
+        Ranked by |floor| toward Summit (+{FLOOR_MAX}) / Abyss ({FLOOR_MIN})
       </p>
 
       <div className="mb-4 rounded-lg bg-zinc-800/50 px-3 py-2">

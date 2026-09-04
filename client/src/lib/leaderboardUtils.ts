@@ -10,7 +10,7 @@ export function formatFloorLabel(height: number): string {
   return String(height)
 }
 
-/** Closest to Summit (+25) or Abyss (-25) wins; ties prefer higher height, then lower id. */
+/** Closest to Summit (+50) or Abyss (-50) wins; ties prefer higher height, then lower id. */
 export function compareLeaderboard(a: LeaderboardEntry, b: LeaderboardEntry): number {
   const absDiff = Math.abs(b.height) - Math.abs(a.height)
   if (absDiff !== 0) return absDiff

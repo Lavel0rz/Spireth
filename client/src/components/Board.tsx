@@ -5,6 +5,8 @@ import { useSpirethEvents } from '@/hooks/useSpirethEvents'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { GameCanvas, type GameCanvasDisplayMetrics } from '@/components/GameCanvas'
 import {
+  FLOOR_MAX,
+  FLOOR_MIN,
   RHOMBUS_ABYSS_Y,
   RHOMBUS_SUMMIT_Y,
   rhombusYFraction,
@@ -139,12 +141,12 @@ export function Board({
           <div
             className="absolute left-3 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-emerald-500 pointer-events-none z-10"
             style={{ top: `${summitPct}%` }}
-            title="Summit +25"
+            title={`Summit +${FLOOR_MAX}`}
           />
           <div
             className="absolute left-3 w-3 h-3 -translate-x-1/2 translate-y-1/2 rotate-45 bg-red-500 pointer-events-none z-10"
             style={{ top: `${abyssPct}%` }}
-            title="Abyss -25"
+            title={`Abyss ${FLOOR_MIN}`}
           />
         </div>
 

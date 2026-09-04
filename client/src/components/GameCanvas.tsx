@@ -23,6 +23,7 @@ import {
   laneBounds,
   shortAddress,
   jumpDurationMs,
+  shouldShowFloorLabel,
   tintFromAddress,
   yForLevel,
   type Direction,
@@ -204,8 +205,8 @@ function platformTileForLevel(
   const isSummit = level === FLOOR_MAX
   const isAbyss = level === FLOOR_MIN
 
-  if (isAbyss || level <= -18) return { tile: sprites.hills, variant: 'hills' }
-  if (isSummit || level >= 22) return { tile: sprites.grass, variant: 'grass' }
+  if (isAbyss || level <= -36) return { tile: sprites.hills, variant: 'hills' }
+  if (isSummit || level >= 44) return { tile: sprites.grass, variant: 'grass' }
   if (level === 0) return { tile: sprites.grass, variant: 'grass' }
   return { tile: sprites.stone, variant: 'stone' }
 }
@@ -534,7 +535,7 @@ export function GameCanvas({
         const { tile, variant } = platformTileForLevel(level, sprites)
         drawPlatformStrip(ctx, tile, px, y, pw, variant)
 
-        if (level <= -22) {
+        if (level <= -44) {
           ctx.imageSmoothingEnabled = false
           const waterY = y + 4
           ctx.save()
@@ -555,7 +556,7 @@ export function GameCanvas({
         ctx.fillStyle = borderColor
         ctx.fillRect(px, y + 3, pw, 1)
 
-        if (isSummit || isAbyss || isCenter || level % 6 === 0) {
+        if (shouldShowFloorLabel(level)) {
           ctx.font = '10px monospace'
           ctx.fillStyle = isSummit ? '#34d399' : isAbyss ? '#f87171' : isCenter ? '#fbbf24' : '#71717a'
           ctx.textAlign = 'right'

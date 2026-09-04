@@ -25,8 +25,8 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  * - Block producers cannot know the player's secret when producing the block
  */
 contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
-    int8 public constant SUMMIT = 25;
-    int8 public constant ABYSS = -25;
+    int8 public constant SUMMIT = 50;
+    int8 public constant ABYSS = -50;
     uint256 public constant SIGNUP_DURATION = 72 hours;
     uint256 public constant SEASON_MAX_DURATION = 45 days;
     uint256 public constant ROLL_COOLDOWN = 24 hours;

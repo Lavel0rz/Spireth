@@ -68,6 +68,10 @@ export default function Home() {
                   <span>Free join during signup or live season</span>
                 </li>
                 <li className="flex gap-2">
+                  <span className="text-emerald-400">◈</span>
+                  <span>Reach ±50 to ring the bell and freeze the season</span>
+                </li>
+                <li className="flex gap-2">
                   <span className="text-amber-400">◈</span>
                   <span>Roll cost: ~$5 (80% to pool)</span>
                 </li>
