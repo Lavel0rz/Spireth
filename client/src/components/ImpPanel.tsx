@@ -145,7 +145,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   if (!address) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Imp</h2>
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Character</h2>
         <p className="text-zinc-400">Connect your wallet to play.</p>
       </div>
     )
@@ -163,7 +163,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
           disabled={isMinting || isMintConfirming}
           className="w-full px-4 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold rounded-lg transition disabled:opacity-50"
         >
-          {isMinting ? 'Confirm in wallet…' : isMintConfirming ? 'Joining…' : 'Join the Spireth'}
+          {isMinting ? 'Confirm in wallet…' : isMintConfirming ? 'Joining…' : 'Join'}
         </button>
       </div>
     )
@@ -183,8 +183,8 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   if (impId === null) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Imp</h2>
-        <p className="text-zinc-400">Select an Imp on the board or enter its ID.</p>
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Character</h2>
+        <p className="text-zinc-400">Select your character on the board.</p>
       </div>
     )
   }

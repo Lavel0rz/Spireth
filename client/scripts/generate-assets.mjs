@@ -88,28 +88,6 @@ function drawPepeFrame(img, ox, oy, direction, frame) {
   }
 }
 
-function drawCommitFrame(img, ox, oy, frame) {
-  const body = MINT
-  const crouch = frame === 0 ? 4 : 0
-  const jump = frame === 1 ? -6 : 0
-  const y = oy + crouch + jump
-  fillRect(img, ox + 14, y + 8, 20, 18, body)
-  fillRect(img, ox + 12, y + 6, 24, 6, body)
-  fillRect(img, ox + 10, y + 4, 28, 4, body)
-  fillRect(img, ox + 16, y + 14, 6, 4, WHITE)
-  fillRect(img, ox + 26, y + 14, 6, 4, WHITE)
-  fillRect(img, ox + 17, y + 15, 4, 2, BLACK)
-  fillRect(img, ox + 27, y + 15, 4, 2, BLACK)
-  fillRect(img, ox + 18, y + 24, 12, 2, DARK_MINT)
-  fillRect(img, ox + 16, y + 32 + crouch, 8, 10 - crouch, body)
-  fillRect(img, ox + 26, y + 32 + crouch, 8, 10 - crouch, body)
-  if (frame === 1) {
-    fillRect(img, ox + 20, y + 2, 8, 4, body)
-    fillRect(img, ox + 8, y + 16, 6, 4, body)
-    fillRect(img, ox + 34, y + 16, 6, 4, body)
-  }
-}
-
 function drawGrassTile(img, ox, oy, variant) {
   fillRect(img, ox, oy, 48, 48, MINT)
   fillRect(img, ox, oy, 48, 2, DARK_MINT)
@@ -126,14 +104,54 @@ function drawGrassTile(img, ox, oy, variant) {
   }
 }
 
-function drawHillTile(img, ox, oy) {
+function drawStoneTile(img, ox, oy, variant) {
   fillRect(img, ox, oy, 48, 48, DARK_MINT)
-  for (let i = 0; i < 12; i++) {
-    const px = 4 + (i * 7) % 40
-    const py = 6 + (i * 11) % 36
-    fillRect(img, ox + px, oy + py, 3, 2, GREY)
+  const spots = variant === 0
+    ? [[6, 8], [20, 14], [34, 10], [12, 28], [30, 34], [40, 22]]
+    : [[10, 12], [24, 6], [8, 30], [22, 36], [36, 18], [44, 38]]
+  for (const [tx, ty] of spots) {
+    fillRect(img, ox + tx, oy + ty, 4, 3, GREY)
   }
-  fillRect(img, ox + 4, oy + 40, 40, 4, MINT)
+  fillRect(img, ox, oy, 48, 2, [100, 130, 96, 255])
+}
+
+function drawGrassTileset(img) {
+  fillRect(img, 0, 0, 48, 48, MINT)
+  fillRect(img, 0, 0, 48, 48, [0, 0, 0, 0])
+  fillRect(img, 4, 4, 40, 40, MINT)
+  fillRect(img, 4, 4, 40, 4, DARK_MINT)
+  fillRect(img, 4, 40, 40, 4, DARK_MINT)
+  fillRect(img, 4, 4, 4, 40, DARK_MINT)
+  fillRect(img, 40, 4, 4, 40, DARK_MINT)
+  drawGrassTile(img, 0, 64, 0)
+  drawGrassTile(img, 48, 64, 1)
+  drawGrassTile(img, 96, 64, 0)
+}
+
+function drawHillTileset(img) {
+  fillRect(img, 0, 0, 80, 64, DARK_MINT)
+  fillRect(img, 4, 4, 72, 56, [120, 155, 112, 255])
+  fillRect(img, 4, 4, 72, 6, [90, 120, 84, 255])
+  for (let i = 0; i < 20; i++) {
+    const px = 6 + (i * 11) % 68
+    const py = 10 + (i * 7) % 40
+    fillRect(img, px, py, 3, 2, GREY)
+  }
+  drawGrassTile(img, 0, 64, 0)
+  drawGrassTile(img, 48, 64, 1)
+  drawGrassTile(img, 96, 64, 0)
+}
+
+function drawStoneTileset(img) {
+  fillRect(img, 80, 0, 80, 64, [130, 160, 124, 255])
+  for (let i = 0; i < 24; i++) {
+    const px = 84 + (i * 9) % 72
+    const py = 6 + (i * 11) % 52
+    fillRect(img, px, py, 4, 3, GREY)
+  }
+  drawStoneTile(img, 0, 64, 0)
+  drawStoneTile(img, 48, 64, 1)
+  drawStoneTile(img, 96, 64, 0)
 }
 
 function crc32(buf) {
@@ -197,7 +215,10 @@ function writePng(path, img) {
 }
 
 async function main() {
-  await mkdir(OUT, { recursive: true })
+  const charsDir = join(OUT, 'characters')
+  const tilesDir = join(OUT, 'tiles')
+  await mkdir(charsDir, { recursive: true })
+  await mkdir(tilesDir, { recursive: true })
 
   const walk = createImage(192, 192)
   const dirs = ['down', 'up', 'right', 'left']
@@ -206,23 +227,21 @@ async function main() {
       drawPepeFrame(walk, col * 48, row * 48, dirs[row], col)
     }
   }
-  await writePng(join(OUT, 'character-walk.png'), walk)
+  await writePng(join(charsDir, 'Basic-Character-Spritesheet.png'), walk)
 
-  const actions = createImage(96, 96)
-  for (let i = 0; i < 2; i++) drawCommitFrame(actions, i * 48, 0, i)
-  for (let i = 0; i < 2; i++) drawCommitFrame(actions, i * 48, 48, i)
-  await writePng(join(OUT, 'character-actions.png'), actions)
+  const grassTile = createImage(176, 112)
+  drawGrassTileset(grassTile)
+  await writePng(join(tilesDir, 'Grass_Tile.png'), grassTile)
 
-  const grass = createImage(96, 48)
-  drawGrassTile(grass, 0, 0, 0)
-  drawGrassTile(grass, 48, 0, 1)
-  await writePng(join(OUT, 'grass.png'), grass)
+  const hills = createImage(160, 100)
+  drawHillTileset(hills)
+  await writePng(join(tilesDir, 'Dark_Grass_Hill_Tiles.png'), hills)
 
-  const hills = createImage(48, 48)
-  drawHillTile(hills, 0, 0)
-  await writePng(join(OUT, 'hills.png'), hills)
+  const stone = createImage(160, 100)
+  drawStoneTileset(stone)
+  await writePng(join(tilesDir, 'Stone_Ground_Tiles.png'), stone)
 
-  console.log('Generated assets in', OUT)
+  console.log('Generated fallback assets in', OUT)
 }
 
 main().catch((e) => {
