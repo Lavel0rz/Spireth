@@ -22,6 +22,7 @@ import {
   floorWidth,
   laneBounds,
   shortAddress,
+  jumpDurationMs,
   tintFromAddress,
   yForLevel,
   type Direction,
@@ -39,7 +40,8 @@ const CENTER_X = CANVAS_W / 2
 const HIT_RADIUS_RATIO = 0.65
 const CROWDED_FLOOR_THRESHOLD = 4
 const CROWDED_SPRITE_SCALE = 0.82
-const JUMP_ARC_HEIGHT = 10
+const JUMP_ARC_HEIGHT = 7
+const COMMIT_BOUNCE = { dip: 1, peak: -5, settle: -2 } as const
 
 type AnimState = 'walk' | 'commit' | 'revealPending' | 'jump' | 'dead'
 
@@ -58,8 +60,7 @@ interface CharacterEntity {
   jumpFrom: number
   jumpTo: number
   jumpProgress: number
-  jumpSteps: number[]
-  jumpStepIndex: number
+  jumpDuration: number
   tint: [number, number, number]
   isDead: boolean
   isSelected: boolean
@@ -220,13 +221,8 @@ function spriteSizeForFloor(peerCount: number): number {
     : DISPLAY_SIZE
 }
 
-function buildJumpSteps(from: number, to: number): number[] {
-  const steps: number[] = []
-  const dir = to > from ? 1 : -1
-  for (let h = from + dir; dir > 0 ? h <= to : h >= to; h += dir) {
-    steps.push(h)
-  }
-  return steps
+function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
 }
 
 function peersOnFloor(entities: Map<string, CharacterEntity>, height: number): string[] {
@@ -340,14 +336,21 @@ export function GameCanvas({
           jumpFrom: imp.height,
           jumpTo: imp.height,
           jumpProgress: 0,
-          jumpSteps: [],
-          jumpStepIndex: 0,
+          jumpDuration: 0,
           tint: tintFromAddress(imp.owner),
           isDead: imp.isDead,
           isSelected,
           yOffset: 0,
         })
       } else {
+        if (existing.animState === 'jump') {
+          existing.isSelected = isSelected
+          existing.owner = imp.owner
+          existing.tint = tintFromAddress(imp.owner)
+          existing.isDead = imp.isDead
+          continue
+        }
+
         if (
           existing.animState === 'walk' &&
           !existing.isDead &&
@@ -366,7 +369,6 @@ export function GameCanvas({
           existing.height = imp.height
           existing.displayHeight = imp.height
         } else if (
-          existing.animState !== 'jump' &&
           existing.animState !== 'commit' &&
           existing.animState !== 'revealPending'
         ) {
@@ -397,22 +399,17 @@ export function GameCanvas({
         entity.animState = 'revealPending'
         entity.animTimer = 0
       } else if (event.type === 'reveal') {
-        const steps = buildJumpSteps(entity.displayHeight, event.newHeight)
-        if (steps.length === 0) {
-          entity.displayHeight = event.newHeight
-          entity.height = event.newHeight
+        if (event.newHeight === entity.displayHeight) {
           entity.animState = 'walk'
           return
         }
         entity.animState = 'jump'
         entity.jumpFrom = entity.displayHeight
         entity.jumpTo = event.newHeight
-        entity.jumpSteps = steps
-        entity.jumpStepIndex = 0
         entity.jumpProgress = 0
+        entity.jumpDuration = jumpDurationMs(entity.jumpFrom, entity.jumpTo)
         entity.animTimer = 0
         entity.facing = event.dice > 0 ? 'up' : 'down'
-        entity.height = event.newHeight
       }
     })
   }, [subscribe])
@@ -481,7 +478,12 @@ export function GameCanvas({
           entity.yOffset = 0
         } else if (entity.animState === 'commit') {
           entity.frame = entity.animTimer < 250 ? 0 : 1
-          entity.yOffset = entity.animTimer < 200 ? 2 : entity.animTimer < 400 ? -10 : -4
+          entity.yOffset =
+            entity.animTimer < 200
+              ? COMMIT_BOUNCE.dip
+              : entity.animTimer < 400
+                ? COMMIT_BOUNCE.peak
+                : COMMIT_BOUNCE.settle
           if (entity.animTimer > 550) {
             entity.animState = 'walk'
             entity.yOffset = 0
@@ -494,28 +496,21 @@ export function GameCanvas({
             entity.yOffset = 0
           }
         } else if (entity.animState === 'jump') {
-          const stepDuration = 380
-          entity.jumpProgress = Math.min(1, entity.animTimer / stepDuration)
+          const duration = entity.jumpDuration || 1
+          entity.jumpProgress = Math.min(1, entity.animTimer / duration)
           const t = entity.jumpProgress
-          const arc = Math.sin(t * Math.PI) * JUMP_ARC_HEIGHT
-          const fromY =
-            entity.jumpStepIndex === 0
-              ? entity.jumpFrom
-              : entity.jumpSteps[entity.jumpStepIndex - 1]
-          const toH = entity.jumpSteps[entity.jumpStepIndex] ?? entity.jumpTo
-          entity.displayHeight = fromY + (toH - fromY) * t
-          entity.yOffset = -arc
-          entity.frame = Math.floor(entity.animTimer / 100) % 4
+          const eased = easeInOutCubic(t)
+          entity.displayHeight = entity.jumpFrom + (entity.jumpTo - entity.jumpFrom) * eased
+          entity.yOffset = -Math.sin(t * Math.PI) * JUMP_ARC_HEIGHT
           if (entity.jumpProgress >= 1) {
-            entity.jumpStepIndex++
-            entity.animTimer = 0
-            entity.jumpProgress = 0
-            if (entity.jumpStepIndex >= entity.jumpSteps.length) {
-              entity.displayHeight = entity.jumpTo
-              entity.animState = 'walk'
-              entity.yOffset = 0
-              entity.facing = entity.direction > 0 ? 'right' : 'left'
-            }
+            entity.displayHeight = entity.jumpTo
+            entity.height = entity.jumpTo
+            entity.animState = 'walk'
+            entity.yOffset = 0
+            entity.facing = entity.direction > 0 ? 'right' : 'left'
+            const landedPeers = peersOnFloor(entitiesRef.current, entity.jumpTo)
+            const landedLane = laneBounds(entity.impId, landedPeers)
+            entity.floorX = landedLane.center
           }
         } else if (entity.isDead) {
           entity.yOffset = 2
@@ -601,10 +596,10 @@ export function GameCanvas({
             actionCol = Math.floor(entity.animTimer / 120) % 2
           } else if (entity.facing === 'up') {
             actionRow = 0
-            actionCol = entity.jumpProgress < 0.5 ? 1 : 0
+            actionCol = 1
           } else if (entity.facing === 'down') {
             actionRow = 2
-            actionCol = entity.jumpProgress < 0.5 ? 1 : 0
+            actionCol = 1
           } else {
             actionRow = entity.facing === 'right' ? 2 : 3
             actionCol = entity.frame % 2
