@@ -48,10 +48,14 @@ const CENTER_X = CANVAS_W / 2
 const HIT_RADIUS_RATIO = 0.65
 const CROWDED_FLOOR_THRESHOLD = 4
 const LARGE_SIM_THRESHOLD = 200
+const VERY_LARGE_SIM_THRESHOLD = 500
 const CROWDED_SPRITE_SCALE = 0.88
+const VERY_LARGE_SPRITE_SCALE = 0.78
 const JUMP_ARC_HEIGHT = 7
 const COMMIT_BOUNCE = { dip: 1, peak: -5, settle: -2 } as const
 const BILLBOARD_PLATFORM_H = 20
+const MAX_DRAW_PER_FLOOR = 8
+const DEAD_SKIP_MS = 1000
 
 const textWidthCache = new Map<string, number>()
 const tintedSpriteCache = new Map<string, HTMLCanvasElement>()
@@ -76,8 +80,9 @@ function getTintedFrameCacheKey(
   frame: PepeFrame,
   tint: [number, number, number],
   greyscale: boolean,
+  noOutline: boolean,
 ): string {
-  return `${frame.col}|${frame.row}|${frame.flipX ? 1 : 0}|${tint[0]}|${tint[1]}|${tint[2]}|${greyscale ? 1 : 0}`
+  return `${frame.col}|${frame.row}|${frame.flipX ? 1 : 0}|${tint[0]}|${tint[1]}|${tint[2]}|${greyscale ? 1 : 0}|${noOutline ? 1 : 0}`
 }
 
 type AnimState = 'walk' | 'commit' | 'revealPending' | 'jump' | 'dead'
@@ -100,6 +105,7 @@ interface CharacterEntity {
   jumpDuration: number
   tint: [number, number, number]
   isDead: boolean
+  deadSince: number
   isSelected: boolean
   yOffset: number
   dice: number | null
@@ -119,9 +125,9 @@ function createTintedFrame(
   frame: PepeFrame,
   tint: [number, number, number],
   greyscale: boolean,
+  noOutline: boolean,
 ): HTMLCanvasElement {
   const offCtx = offscreen.getContext('2d')!
-  const outlineCtx = outlineCanvas.getContext('2d')!
 
   const { col, row, flipX } = frame
   const sx = col * FRAME_W
@@ -160,6 +166,17 @@ function createTintedFrame(
   }
   offCtx.putImageData(imgData, 0, 0)
 
+  if (noOutline) {
+    const cachedCanvas = document.createElement('canvas')
+    cachedCanvas.width = FRAME_W + 2
+    cachedCanvas.height = FRAME_H + 2
+    const cachedCtx = cachedCanvas.getContext('2d')!
+    cachedCtx.imageSmoothingEnabled = false
+    cachedCtx.drawImage(offscreen, 1, 1)
+    return cachedCanvas
+  }
+
+  const outlineCtx = outlineCanvas.getContext('2d')!
   outlineCtx.clearRect(0, 0, FRAME_W, FRAME_H)
   outlineCtx.drawImage(offscreen, 0, 0)
   outlineCtx.globalCompositeOperation = 'source-in'
@@ -197,12 +214,13 @@ function drawTintedFrame(
   drawH: number,
   tint: [number, number, number],
   greyscale = false,
+  noOutline = false,
 ) {
   const offCtx = offscreen.getContext('2d')
   const outlineCtx = outlineCanvas.getContext('2d')
   if (!offCtx || !outlineCtx) return
 
-  const cacheKey = getTintedFrameCacheKey(frame, tint, greyscale)
+  const cacheKey = getTintedFrameCacheKey(frame, tint, greyscale, noOutline)
   let cachedFrame = tintedSpriteCache.get(cacheKey)
 
   if (!cachedFrame) {
@@ -210,7 +228,7 @@ function drawTintedFrame(
       const firstKey = tintedSpriteCache.keys().next().value
       if (firstKey) tintedSpriteCache.delete(firstKey)
     }
-    cachedFrame = createTintedFrame(offscreen, outlineCanvas, image, frame, tint, greyscale)
+    cachedFrame = createTintedFrame(offscreen, outlineCanvas, image, frame, tint, greyscale, noOutline)
     tintedSpriteCache.set(cacheKey, cachedFrame)
   }
 
@@ -302,23 +320,20 @@ function charYOnFloor(floorY: number, yOffset: number, drawH: number): number {
   return platformTop - footOffset + yOffset
 }
 
-function spriteDrawSize(peerCount: number): { drawW: number; drawH: number } {
-  const drawH =
-    peerCount > CROWDED_FLOOR_THRESHOLD
-      ? DISPLAY_HEIGHT * CROWDED_SPRITE_SCALE
-      : DISPLAY_HEIGHT
+function spriteDrawSize(peerCount: number, totalEntities: number): { drawW: number; drawH: number } {
+  let scale = 1
+  if (totalEntities >= VERY_LARGE_SIM_THRESHOLD) {
+    scale = VERY_LARGE_SPRITE_SCALE
+  } else if (peerCount > CROWDED_FLOOR_THRESHOLD) {
+    scale = CROWDED_SPRITE_SCALE
+  }
+  const drawH = DISPLAY_HEIGHT * scale
   const drawW = drawH * (DISPLAY_WIDTH / DISPLAY_HEIGHT)
   return { drawW, drawH }
 }
 
 function easeInOutCubic(t: number): number {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
-}
-
-function peersOnFloor(entities: Map<string, CharacterEntity>, height: number): string[] {
-  return [...entities.values()]
-    .filter((e) => Math.round(e.displayHeight) === height)
-    .map((e) => e.impId)
 }
 
 function drawIdBadge(
@@ -406,6 +421,8 @@ export function GameCanvas({
   const entitiesRef = useRef<Map<string, CharacterEntity>>(new Map())
   const rafRef = useRef<number>(0)
   const lastTimeRef = useRef<number>(0)
+  const frameCountRef = useRef<number>(0)
+  const floorPeerCacheRef = useRef<Map<number, string[]>>(new Map())
   const { sprites, ready } = useGameSprites()
   const { subscribe } = useGameAnimation()
   const [fitScale, setFitScale] = useState(1)
@@ -462,6 +479,7 @@ export function GameCanvas({
           jumpDuration: 0,
           tint: tintFromAddress(imp.owner),
           isDead: imp.isDead,
+          deadSince: imp.isDead ? Date.now() : 0,
           isSelected,
           yOffset: 0,
           dice: null,
@@ -490,6 +508,7 @@ export function GameCanvas({
           existing.floorX = newLane.center
         } else if (existing.isDead !== imp.isDead) {
           existing.isDead = imp.isDead
+          existing.deadSince = imp.isDead ? Date.now() : 0
           existing.animState = imp.isDead ? 'dead' : 'walk'
           existing.height = imp.height
           existing.displayHeight = imp.height
@@ -570,12 +589,26 @@ export function GameCanvas({
     const tick = (time: number) => {
       const dt = Math.min(32, time - lastTimeRef.current || 16)
       lastTimeRef.current = time
+      frameCountRef.current += 1
       syncEntities()
 
+      const totalEntities = entitiesRef.current.size
+      const isLargeSim = totalEntities >= LARGE_SIM_THRESHOLD
+      const isOddFrame = frameCountRef.current % 2 === 1
+      const now = Date.now()
+
       const floorPeerCounts = new Map<number, number>()
+      const floorPeerCache = floorPeerCacheRef.current
+      floorPeerCache.clear()
       for (const entity of entitiesRef.current.values()) {
         const h = Math.round(entity.displayHeight)
         floorPeerCounts.set(h, (floorPeerCounts.get(h) ?? 0) + 1)
+        let peers = floorPeerCache.get(h)
+        if (!peers) {
+          peers = []
+          floorPeerCache.set(h, peers)
+        }
+        peers.push(entity.impId)
       }
 
       for (const entity of entitiesRef.current.values()) {
@@ -583,7 +616,7 @@ export function GameCanvas({
         entity.animTimer += dt
 
         const floorHeight = Math.round(entity.displayHeight)
-        const peerIds = peersOnFloor(entitiesRef.current, floorHeight)
+        const peerIds = floorPeerCache.get(floorHeight) ?? []
         const isExpanded = expandedFloorRef.current === floorHeight
         const lane = laneBounds(entity.impId, peerIds, isExpanded)
 
@@ -599,7 +632,8 @@ export function GameCanvas({
             entity.direction = 1
             entity.facing = 'right'
           }
-          if (entity.frameTimer > 140) {
+          const shouldAdvanceFrame = !isLargeSim || entity.isSelected || !isOddFrame
+          if (shouldAdvanceFrame && entity.frameTimer > 140) {
             entity.frameTimer = 0
             entity.frame = (entity.frame + 1) % 4
           }
@@ -640,7 +674,7 @@ export function GameCanvas({
             entity.animState = 'walk'
             entity.yOffset = 0
             entity.facing = entity.direction > 0 ? 'right' : 'left'
-            const landedPeers = peersOnFloor(entitiesRef.current, entity.jumpTo)
+            const landedPeers = floorPeerCache.get(entity.jumpTo) ?? []
             const landedLane = laneBounds(entity.impId, landedPeers)
             entity.floorX = landedLane.center
           }
@@ -722,17 +756,31 @@ export function GameCanvas({
         }
       }
 
-      const sorted = [...entitiesRef.current.values()].sort(
+      let sorted = [...entitiesRef.current.values()].sort(
         (a, b) => a.displayHeight - b.displayHeight,
       )
 
-      const totalEntities = sorted.length
-      const isLargeSim = totalEntities >= LARGE_SIM_THRESHOLD
+      if (isLargeSim) {
+        sorted = sorted.filter((e) => {
+          if (!e.isDead) return true
+          if (e.isSelected) return true
+          return now - e.deadSince < DEAD_SKIP_MS
+        })
+      }
+
+      const floorDrawCounts = new Map<number, number>()
 
       for (const entity of sorted) {
         const floorHeight = Math.round(entity.displayHeight)
+
+        if (isLargeSim && !entity.isSelected) {
+          const drawn = floorDrawCounts.get(floorHeight) ?? 0
+          if (drawn >= MAX_DRAW_PER_FLOOR) continue
+          floorDrawCounts.set(floorHeight, drawn + 1)
+        }
+
         const peerCount = floorPeerCounts.get(floorHeight) ?? 1
-        const { drawW, drawH } = spriteDrawSize(peerCount)
+        const { drawW, drawH } = spriteDrawSize(peerCount, totalEntities)
 
         const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
         const px = CENTER_X - pw / 2
@@ -753,6 +801,7 @@ export function GameCanvas({
           pepeFrame = pepeWalkFrame(entity.facing, entity.frame)
         }
 
+        const useNoOutline = isLargeSim && !entity.isSelected
         drawTintedFrame(
           ctx,
           offscreenRef.current!,
@@ -765,6 +814,7 @@ export function GameCanvas({
           drawH,
           entity.tint,
           entity.isDead,
+          useNoOutline,
         )
 
         if (entity.isSelected) {
@@ -793,7 +843,7 @@ export function GameCanvas({
 
         const showDice =
           entity.dice !== null &&
-          (entity.animState === 'jump' || Date.now() < entity.diceShowUntil)
+          (entity.animState === 'jump' || now < entity.diceShowUntil)
         const showDiceBadge = showDice && (entity.isSelected || !isLargeSim)
         if (showDiceBadge) {
           drawDiceBadge(ctx, charX, charY, drawW, entity.dice!)
@@ -889,12 +939,13 @@ export function GameCanvas({
     }
 
     let closest: { id: string; dist: number; floor: number } | null = null
+    const totalEntities = entitiesRef.current.size
     for (const entity of entitiesRef.current.values()) {
       const floorHeight = Math.round(entity.displayHeight)
       const peerCount = [...entitiesRef.current.values()].filter(
         (entry) => Math.round(entry.displayHeight) === floorHeight,
       ).length
-      const { drawW, drawH } = spriteDrawSize(peerCount)
+      const { drawW, drawH } = spriteDrawSize(peerCount, totalEntities)
 
       const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
       const px = CENTER_X - pw / 2

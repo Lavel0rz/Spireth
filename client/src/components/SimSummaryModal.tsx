@@ -1,7 +1,7 @@
 'use client'
 
 import type { SimSummary, Top10Entry } from '@/hooks/useSimulateCompetition'
-import { BELL_BONUS_PCT } from '@/hooks/useSimulateCompetition'
+import { BELL_BONUS_PCT, PAID_TOP_PCT } from '@/hooks/useSimulateCompetition'
 import { FLOOR_MAX, FLOOR_MIN } from '@/lib/gameUtils'
 
 function formatUsd(amount: number): string {
@@ -88,8 +88,8 @@ export function SimSummaryModal({
           <span className="font-semibold text-amber-200">Bell bonus:</span>{' '}
           Pepe #{summary.winnerId.toString()} earns {formatUsd(summary.bellBonusUsd)} (
           {BELL_BONUS_PCT}% of pool). Remaining {formatUsd(summary.remainingPoolUsd)} distributed
-          rank-weighted to top {Math.ceil(summary.livingAtEnd / 2)} of {summary.livingAtEnd} living
-          Pepes by absolute floor rank (bottom half + dead get $0 ranking pay).
+          to top {PAID_TOP_PCT}% of {summary.livingAtEnd} living Pepes by absolute floor rank with
+          geometric decay (rank 1 beats rank 5 beats rank 10).
         </div>
 
         <div className="mb-5">
