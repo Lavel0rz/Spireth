@@ -1633,6 +1633,11 @@
   },
   {
     "type": "error",
+    "name": "ExceedsRankPool",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "HornAlreadySounded",
     "inputs": []
   },

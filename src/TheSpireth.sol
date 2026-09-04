@@ -137,6 +137,7 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     error RootAlreadySet();
     error InvalidProof();
     error NotBellRinger();
+    error ExceedsRankPool();
     
     constructor(
         address _owner,
@@ -361,12 +362,15 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         if (seasonState != SeasonState.Frozen) revert NotFrozen();
         if (merkleRoot == bytes32(0)) revert RootNotSet();
         if (ownerOf(impId) != msg.sender) revert NotImpOwner();
+        if (amount == 0) revert NoPrize();
         
         Imp storage imp = imps[impId];
         if (imp.hasClaimedRank) revert AlreadyClaimed();
         
         bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(impId, amount))));
         if (!MerkleProof.verify(proof, merkleRoot, leaf)) revert InvalidProof();
+        
+        if (rankClaimedTotal + amount > rankPrizePool) revert ExceedsRankPool();
         
         imp.hasClaimedRank = true;
         rankClaimedTotal += amount;

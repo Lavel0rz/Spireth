@@ -409,6 +409,47 @@ contract TheSpirethTest is Test {
         spireth.claimRank(0, 0.1 ether, proof);
     }
 
+    function test_ClaimRankZeroAmountReverts() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        uint256 impId = 0;
+        uint256 amount = 0;
+        
+        bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(impId, amount))));
+        bytes32 root = leaf;
+        
+        vm.prank(owner);
+        spireth.publishPrizeRoot(root);
+        
+        bytes32[] memory proof = new bytes32[](0);
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.NoPrize.selector);
+        spireth.claimRank(impId, amount, proof);
+    }
+
+    function test_ClaimRankExceedsPoolReverts() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        uint256 rankPool = spireth.rankPrizePool();
+        uint256 excessAmount = rankPool + 1 ether;
+        
+        uint256 impId = 0;
+        bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(impId, excessAmount))));
+        bytes32 root = leaf;
+        
+        vm.prank(owner);
+        spireth.publishPrizeRoot(root);
+        
+        bytes32[] memory proof = new bytes32[](0);
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.ExceedsRankPool.selector);
+        spireth.claimRank(impId, excessAmount, proof);
+    }
+
     function test_SweepDustAfterClaims() public {
         _setupLiveSeasonWithPool();
         _freezeWithBellRinger();
