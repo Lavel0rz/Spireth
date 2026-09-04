@@ -25,9 +25,28 @@ export interface ImpData {
   owner: string
 }
 
+/** Continuous rhombus half-width taper (float, sub-pixel friendly). */
 export function floorWidth(level: number, maxWidth: number, minWidth: number): number {
-  const absLevel = Math.abs(level)
-  return maxWidth - absLevel * ((maxWidth - minWidth) / 25)
+  const t = Math.min(1, Math.abs(level) / FLOOR_MAX)
+  return maxWidth - t * (maxWidth - minWidth)
+}
+
+export function floorHalfWidth(level: number, maxWidth: number, minWidth: number): number {
+  return floorWidth(level, maxWidth, minWidth) / 2
+}
+
+/** Board layout constants shared by Board meter + GameCanvas. */
+export const BOARD_CANVAS_W = 440
+export const BOARD_PADDING_TOP = 28
+export const BOARD_FLOOR_GAP = 11
+export const BOARD_CANVAS_H =
+  BOARD_PADDING_TOP + (FLOOR_MAX - FLOOR_MIN) * BOARD_FLOOR_GAP + 40
+
+export const RHOMBUS_SUMMIT_Y = BOARD_PADDING_TOP
+export const RHOMBUS_ABYSS_Y = yForLevel(FLOOR_MIN, BOARD_PADDING_TOP, BOARD_FLOOR_GAP)
+
+export function rhombusYFraction(y: number): number {
+  return y / BOARD_CANVAS_H
 }
 
 export function yForLevel(level: number, paddingTop: number, floorGap: number): number {
@@ -77,7 +96,7 @@ export interface LaneBounds {
 }
 
 /** Stable horizontal lane for an imp among peers on the same floor (0–1 fractions). */
-export function laneBounds(impId: string, peerIds: string[]): LaneBounds {
+export function laneBounds(impId: string, peerIds: string[], expanded = false): LaneBounds {
   const sorted = [...peerIds].sort((a, b) => parseInt(a, 10) - parseInt(b, 10))
   const idx = sorted.indexOf(impId)
   const count = sorted.length
@@ -86,11 +105,11 @@ export function laneBounds(impId: string, peerIds: string[]): LaneBounds {
     return { min: 0.14, max: 0.86, center: 0.5 }
   }
 
-  const usable = 0.72
+  const usable = expanded ? 0.9 : 0.72
   const laneW = usable / count
-  const start = 0.14
+  const start = expanded ? 0.05 : 0.14
   const center = start + laneW * idx + laneW / 2
-  const padding = laneW * 0.22
+  const padding = laneW * (expanded ? 0.12 : 0.22)
 
   return {
     min: center - laneW / 2 + padding,

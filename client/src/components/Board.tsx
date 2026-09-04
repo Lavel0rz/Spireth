@@ -2,9 +2,14 @@
 
 import { useTotalMinted } from '@/hooks/useSpireth'
 import { useSpirethEvents } from '@/hooks/useSpirethEvents'
-import { useState, useEffect, useMemo } from 'react'
-import { GameCanvas } from '@/components/GameCanvas'
-import type { ImpData } from '@/lib/gameUtils'
+import { useState, useEffect, useMemo, useCallback } from 'react'
+import { GameCanvas, type GameCanvasDisplayMetrics } from '@/components/GameCanvas'
+import {
+  RHOMBUS_ABYSS_Y,
+  RHOMBUS_SUMMIT_Y,
+  rhombusYFraction,
+  type ImpData,
+} from '@/lib/gameUtils'
 
 export function Board({
   selectedImpId,
@@ -16,6 +21,7 @@ export function Board({
   useSpirethEvents()
   const { data: totalMinted } = useTotalMinted()
   const [imps, setImps] = useState<ImpData[]>([])
+  const [canvasMetrics, setCanvasMetrics] = useState<GameCanvasDisplayMetrics | null>(null)
 
   const total = totalMinted !== undefined ? Number(totalMinted) : 0
 
@@ -59,6 +65,14 @@ export function Board({
   const livingCount = useMemo(() => imps.filter((i) => !i.isDead).length, [imps])
   const deadCount = imps.length - livingCount
 
+  const handleDisplayMetrics = useCallback((metrics: GameCanvasDisplayMetrics) => {
+    setCanvasMetrics(metrics)
+  }, [])
+
+  const summitPct = rhombusYFraction(RHOMBUS_SUMMIT_Y) * 100
+  const abyssPct = rhombusYFraction(RHOMBUS_ABYSS_Y) * 100
+  const meterHeight = canvasMetrics?.displayHeight ?? undefined
+
   return (
     <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
       <h2 className="text-lg font-semibold text-zinc-200 mb-4 flex items-center gap-2">
@@ -71,22 +85,39 @@ export function Board({
         )}
       </h2>
 
-      <div className="relative">
-        <div className="absolute left-3 top-0 bottom-0 w-px bg-gradient-to-b from-emerald-500 via-zinc-700 to-red-500 pointer-events-none z-10" />
+      <div className="flex gap-1">
         <div
-          className="absolute left-2 top-0 w-3 h-3 rotate-45 bg-emerald-500 pointer-events-none z-10"
-          title="Summit +25"
-        />
-        <div
-          className="absolute left-2 bottom-0 w-3 h-3 rotate-45 bg-red-500 pointer-events-none z-10"
-          title="Abyss -25"
-        />
+          className="relative shrink-0 w-6"
+          style={{ height: meterHeight }}
+          aria-hidden
+        >
+          <div
+            className="absolute left-3 w-px -translate-x-1/2 bg-gradient-to-b from-emerald-500 via-zinc-700 to-red-500 pointer-events-none z-10"
+            style={{
+              top: `${summitPct}%`,
+              height: `${abyssPct - summitPct}%`,
+            }}
+          />
+          <div
+            className="absolute left-3 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rotate-45 bg-emerald-500 pointer-events-none z-10"
+            style={{ top: `${summitPct}%` }}
+            title="Summit +25"
+          />
+          <div
+            className="absolute left-3 w-3 h-3 -translate-x-1/2 translate-y-1/2 rotate-45 bg-red-500 pointer-events-none z-10"
+            style={{ top: `${abyssPct}%` }}
+            title="Abyss -25"
+          />
+        </div>
 
-        <GameCanvas
-          imps={imps}
-          selectedImpId={selectedImpId}
-          onSelectImp={onSelectImp}
-        />
+        <div className="flex-1 min-w-0">
+          <GameCanvas
+            imps={imps}
+            selectedImpId={selectedImpId}
+            onSelectImp={onSelectImp}
+            onDisplayMetrics={handleDisplayMetrics}
+          />
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap justify-center gap-4 text-xs text-zinc-500">
@@ -103,7 +134,7 @@ export function Board({
           <span>Selected</span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-zinc-400">Click a Pepe to select</span>
+          <span className="text-zinc-400">Click a Pepe to select · scroll to zoom · drag to pan</span>
         </div>
       </div>
     </div>

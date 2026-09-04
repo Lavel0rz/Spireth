@@ -87,7 +87,10 @@ export default function Home() {
 
           <div className="space-y-6">
             <SeasonInfo />
-            <Leaderboard />
+            <Leaderboard
+              selectedImpId={selectedImpId}
+              onSelectImp={setSelectedImpId}
+            />
             <ImpPanel impId={selectedImpId} />
             
             <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">

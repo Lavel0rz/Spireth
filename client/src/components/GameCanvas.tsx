@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useGameSprites } from '@/hooks/useGameSprites'
 import { useGameAnimation } from '@/context/GameAnimationContext'
 import {
+  BOARD_CANVAS_H,
+  BOARD_CANVAS_W,
+  BOARD_FLOOR_GAP,
+  BOARD_PADDING_TOP,
   DIRECTION_ROW,
   DISPLAY_SIZE,
   FLOOR_MAX,
@@ -13,22 +17,29 @@ import {
   PLATFORM_TILE_SRC_H,
   PLATFORM_TILE_SRC_Y,
   SPRITE_SIZE,
-  type Direction,
-  type ImpData,
+  floorHalfWidth,
   floorWidth,
   laneBounds,
   shortAddress,
   tintFromAddress,
   yForLevel,
+  type Direction,
+  type ImpData,
 } from '@/lib/gameUtils'
 
-const CANVAS_W = 440
-const PADDING_TOP = 28
-const FLOOR_GAP = 11
+const CANVAS_W = BOARD_CANVAS_W
+const PADDING_TOP = BOARD_PADDING_TOP
+const FLOOR_GAP = BOARD_FLOOR_GAP
 const MAX_PLATFORM_W = 360
 const MIN_PLATFORM_W = 72
 const FOOT_RATIO = 42 / SPRITE_SIZE
-const CANVAS_H = PADDING_TOP + (FLOOR_MAX - FLOOR_MIN) * FLOOR_GAP + 40
+const CANVAS_H = BOARD_CANVAS_H
+const CENTER_X = CANVAS_W / 2
+
+const MIN_ZOOM = 1
+const MAX_ZOOM = 3
+const ZOOM_STEP = 0.5
+const CROWDED_FLOOR_THRESHOLD = 4
 
 type AnimState = 'walk' | 'commit' | 'revealPending' | 'jump' | 'dead'
 
@@ -53,6 +64,12 @@ interface CharacterEntity {
   isDead: boolean
   isSelected: boolean
   yOffset: number
+}
+
+export interface GameCanvasDisplayMetrics {
+  displayHeight: number
+  displayWidth: number
+  fitScale: number
 }
 
 function drawTintedFrame(
@@ -148,6 +165,32 @@ function drawPlatformStrip(
   }
 }
 
+function drawRhombusOutline(ctx: CanvasRenderingContext2D) {
+  const summitY = yForLevel(FLOOR_MAX, PADDING_TOP, FLOOR_GAP)
+  const abyssY = yForLevel(FLOOR_MIN, PADDING_TOP, FLOOR_GAP)
+  const midY = yForLevel(0, PADDING_TOP, FLOOR_GAP)
+
+  const summitHalf = floorHalfWidth(FLOOR_MAX, MAX_PLATFORM_W, MIN_PLATFORM_W)
+  const abyssHalf = floorHalfWidth(FLOOR_MIN, MAX_PLATFORM_W, MIN_PLATFORM_W)
+  const midHalf = floorHalfWidth(0, MAX_PLATFORM_W, MIN_PLATFORM_W)
+
+  ctx.imageSmoothingEnabled = false
+  ctx.strokeStyle = 'rgba(161, 161, 170, 0.45)'
+  ctx.lineWidth = 1
+
+  ctx.beginPath()
+  ctx.moveTo(CENTER_X, summitY - PLATFORM_DRAW_H + 4)
+  ctx.lineTo(CENTER_X - midHalf, midY)
+  ctx.lineTo(CENTER_X - abyssHalf, abyssY + 4)
+  ctx.stroke()
+
+  ctx.beginPath()
+  ctx.moveTo(CENTER_X, summitY - PLATFORM_DRAW_H + 4)
+  ctx.lineTo(CENTER_X + midHalf, midY)
+  ctx.lineTo(CENTER_X + abyssHalf, abyssY + 4)
+  ctx.stroke()
+}
+
 function platformTileForLevel(
   level: number,
   sprites: NonNullable<ReturnType<typeof useGameSprites>['sprites']>,
@@ -181,16 +224,73 @@ function peersOnFloor(entities: Map<string, CharacterEntity>, height: number): s
     .map((e) => e.impId)
 }
 
+function drawIdBadge(
+  ctx: CanvasRenderingContext2D,
+  charX: number,
+  charY: number,
+  spriteSize: number,
+  impId: string,
+  owner: string,
+  isSelected: boolean,
+  isDead: boolean,
+) {
+  const label = isSelected ? `#${impId} ${shortAddress(owner)}` : `#${impId}`
+  const labelX = charX + spriteSize / 2
+  const labelY = charY - 5
+
+  ctx.font = '9px monospace'
+  ctx.textAlign = 'center'
+  const metrics = ctx.measureText(label)
+  const padX = 3
+  const padY = 2
+  const boxW = metrics.width + padX * 2
+  const boxH = 11
+  const boxX = labelX - boxW / 2
+  const boxY = labelY - boxH + 2
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.72)'
+  ctx.fillRect(boxX, boxY, boxW, boxH)
+
+  if (isSelected) {
+    ctx.strokeStyle = 'rgba(196, 181, 253, 0.8)'
+    ctx.lineWidth = 1
+    ctx.strokeRect(boxX + 0.5, boxY + 0.5, boxW - 1, boxH - 1)
+  }
+
+  ctx.fillStyle = isDead ? '#a1a1aa' : isSelected ? '#f4f4f5' : '#d4d4d8'
+  ctx.fillText(label, labelX, labelY)
+}
+
+function clampPan(
+  pan: { x: number; y: number },
+  zoom: number,
+  fitScale: number,
+  viewportW: number,
+  viewportH: number,
+): { x: number; y: number } {
+  const contentW = CANVAS_W * fitScale * zoom
+  const contentH = CANVAS_H * fitScale * zoom
+  const maxX = Math.max(0, (contentW - viewportW) / 2)
+  const maxY = Math.max(0, (contentH - viewportH) / 2)
+  return {
+    x: Math.max(-maxX, Math.min(maxX, pan.x)),
+    y: Math.max(-maxY, Math.min(maxY, pan.y)),
+  }
+}
+
 export function GameCanvas({
   imps,
   selectedImpId,
   onSelectImp,
+  onDisplayMetrics,
 }: {
   imps: ImpData[]
   selectedImpId: bigint | null
   onSelectImp: (id: bigint) => void
+  onDisplayMetrics?: (metrics: GameCanvasDisplayMetrics) => void
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const viewportRef = useRef<HTMLDivElement>(null)
   const offscreenRef = useRef<HTMLCanvasElement | null>(null)
   const outlineRef = useRef<HTMLCanvasElement | null>(null)
   const entitiesRef = useRef<Map<string, CharacterEntity>>(new Map())
@@ -198,14 +298,45 @@ export function GameCanvas({
   const lastTimeRef = useRef<number>(0)
   const { sprites, ready } = useGameSprites()
   const { subscribe } = useGameAnimation()
-  const [scale, setScale] = useState(2)
+  const [fitScale, setFitScale] = useState(2)
+  const [userZoom, setUserZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [expandedFloor, setExpandedFloor] = useState<number | null>(null)
+  const panRef = useRef(pan)
+  const userZoomRef = useRef(userZoom)
+  const fitScaleRef = useRef(fitScale)
+  const isDraggingRef = useRef(false)
+  const dragStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 })
   const impsRef = useRef(imps)
   const selectedRef = useRef(selectedImpId)
+  const expandedFloorRef = useRef(expandedFloor)
+
+  useEffect(() => {
+    panRef.current = pan
+  }, [pan])
+
+  useEffect(() => {
+    userZoomRef.current = userZoom
+  }, [userZoom])
+
+  useEffect(() => {
+    fitScaleRef.current = fitScale
+  }, [fitScale])
 
   useEffect(() => {
     impsRef.current = imps
     selectedRef.current = selectedImpId
-  }, [imps, selectedImpId])
+    expandedFloorRef.current = expandedFloor
+  }, [imps, selectedImpId, expandedFloor])
+
+  const baseDisplayWidth = CANVAS_W * fitScale
+  const baseDisplayHeight = CANVAS_H * fitScale
+  const displayWidth = baseDisplayWidth * userZoom
+  const displayHeight = baseDisplayHeight * userZoom
+
+  useEffect(() => {
+    onDisplayMetrics?.({ displayHeight: baseDisplayHeight, displayWidth: baseDisplayWidth, fitScale })
+  }, [baseDisplayHeight, baseDisplayWidth, fitScale, onDisplayMetrics])
 
   const syncEntities = useCallback(() => {
     const map = entitiesRef.current
@@ -318,6 +449,41 @@ export function GameCanvas({
     syncEntities()
   }, [imps, selectedImpId, syncEntities])
 
+  const focusSelectedPepe = useCallback(() => {
+    if (selectedRef.current === null) return
+    const entity = entitiesRef.current.get(selectedRef.current.toString())
+    const viewport = viewportRef.current
+    if (!entity || !viewport) return
+
+    const zoom = userZoomRef.current
+    const scale = fitScaleRef.current * zoom
+    const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
+    const px = (CANVAS_W - pw) / 2
+    const floorY = yForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
+    const charX = px + entity.floorX * pw
+    const charY = charYOnFloor(floorY, 0) + DISPLAY_SIZE / 2
+
+    const targetZoom = Math.min(MAX_ZOOM, Math.max(1.5, zoom))
+    setUserZoom(targetZoom)
+
+    const contentW = CANVAS_W * fitScaleRef.current * targetZoom
+    const contentH = CANVAS_H * fitScaleRef.current * targetZoom
+    const screenX = (charX / CANVAS_W) * contentW
+    const screenY = (charY / CANVAS_H) * contentH
+
+    const nextPan = clampPan(
+      {
+        x: viewport.clientWidth / 2 - screenX,
+        y: viewport.clientHeight / 2 - screenY,
+      },
+      targetZoom,
+      fitScaleRef.current,
+      viewport.clientWidth,
+      viewport.clientHeight,
+    )
+    setPan(nextPan)
+  }, [])
+
   useEffect(() => {
     if (!ready || !sprites) return
 
@@ -344,12 +510,20 @@ export function GameCanvas({
       lastTimeRef.current = time
       syncEntities()
 
+      const floorPeerCounts = new Map<number, number>()
+      for (const entity of entitiesRef.current.values()) {
+        const h = Math.round(entity.displayHeight)
+        floorPeerCounts.set(h, (floorPeerCounts.get(h) ?? 0) + 1)
+      }
+
       for (const entity of entitiesRef.current.values()) {
         entity.frameTimer += dt
         entity.animTimer += dt
 
         const floorHeight = Math.round(entity.displayHeight)
-        const lane = laneBounds(entity.impId, peersOnFloor(entitiesRef.current, floorHeight))
+        const peerIds = peersOnFloor(entitiesRef.current, floorHeight)
+        const isExpanded = expandedFloorRef.current === floorHeight
+        const lane = laneBounds(entity.impId, peerIds, isExpanded)
 
         if (entity.animState === 'walk' && !entity.isDead) {
           const speed = 0.00003 * dt
@@ -415,10 +589,12 @@ export function GameCanvas({
       ctx.imageSmoothingEnabled = false
       ctx.clearRect(0, 0, CANVAS_W, CANVAS_H)
 
+      drawRhombusOutline(ctx)
+
       for (let level = FLOOR_MAX; level >= FLOOR_MIN; level--) {
         const y = yForLevel(level, PADDING_TOP, FLOOR_GAP)
         const pw = floorWidth(level, MAX_PLATFORM_W, MIN_PLATFORM_W)
-        const px = (CANVAS_W - pw) / 2
+        const px = CENTER_X - pw / 2
         const isCenter = level === 0
         const isSummit = level === FLOOR_MAX
         const isAbyss = level === FLOOR_MIN
@@ -450,15 +626,22 @@ export function GameCanvas({
         }
       }
 
+      const clusterLabels: { x: number; y: number; extra: number }[] = []
+
       const sorted = [...entitiesRef.current.values()].sort(
         (a, b) => a.displayHeight - b.displayHeight,
       )
 
       for (const entity of sorted) {
+        const floorHeight = Math.round(entity.displayHeight)
+        const peerCount = floorPeerCounts.get(floorHeight) ?? 1
+        const crowded = peerCount > CROWDED_FLOOR_THRESHOLD
+        const spriteSize = crowded ? DISPLAY_SIZE * 0.82 : DISPLAY_SIZE
+
         const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
-        const px = (CANVAS_W - pw) / 2
+        const px = CENTER_X - pw / 2
         const floorY = yForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
-        const charX = px + entity.floorX * pw - DISPLAY_SIZE / 2
+        const charX = px + entity.floorX * pw - spriteSize / 2
         const charY = charYOnFloor(floorY, entity.yOffset)
 
         const useActions =
@@ -494,7 +677,7 @@ export function GameCanvas({
             actionRow * SPRITE_SIZE,
             charX,
             charY,
-            DISPLAY_SIZE,
+            spriteSize,
             entity.tint,
             entity.isDead,
           )
@@ -510,7 +693,7 @@ export function GameCanvas({
             row * SPRITE_SIZE,
             charX,
             charY,
-            DISPLAY_SIZE,
+            spriteSize,
             entity.tint,
             entity.isDead,
           )
@@ -522,22 +705,44 @@ export function GameCanvas({
           ctx.lineWidth = 1
           ctx.shadowColor = 'rgba(167, 139, 250, 0.7)'
           ctx.shadowBlur = 6
-          ctx.strokeRect(charX + 0.5, charY + 0.5, DISPLAY_SIZE - 1, DISPLAY_SIZE - 1)
+          ctx.strokeRect(charX + 0.5, charY + 0.5, spriteSize - 1, spriteSize - 1)
           ctx.shadowBlur = 0
         }
 
-        if (entity.isSelected || entity.isDead) {
-          ctx.font = '9px monospace'
-          ctx.textAlign = 'center'
-          const label = entity.isSelected
-            ? `#${entity.impId} ${shortAddress(entity.owner)}`
-            : `#${entity.impId}`
-          const labelY = charY - 5
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.65)'
-          ctx.fillText(label, charX + DISPLAY_SIZE / 2 + 1, labelY + 1)
-          ctx.fillStyle = entity.isDead ? '#a1a1aa' : '#f4f4f5'
-          ctx.fillText(label, charX + DISPLAY_SIZE / 2, labelY)
+        drawIdBadge(
+          ctx,
+          charX,
+          charY,
+          spriteSize,
+          entity.impId,
+          entity.owner,
+          entity.isSelected,
+          entity.isDead,
+        )
+
+        if (crowded && peerCount > CROWDED_FLOOR_THRESHOLD) {
+          const peerIds = peersOnFloor(entitiesRef.current, floorHeight)
+          const sortedPeers = [...peerIds].sort((a, b) => parseInt(a, 10) - parseInt(b, 10))
+          if (sortedPeers[0] === entity.impId) {
+            clusterLabels.push({
+              x: px + pw / 2,
+              y: floorY - 18,
+              extra: peerCount - 3,
+            })
+          }
         }
+      }
+
+      for (const cluster of clusterLabels) {
+        if (cluster.extra <= 0) continue
+        const text = `+${cluster.extra}`
+        ctx.font = 'bold 9px monospace'
+        ctx.textAlign = 'center'
+        const tw = ctx.measureText(text).width + 8
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'
+        ctx.fillRect(cluster.x - tw / 2, cluster.y - 8, tw, 12)
+        ctx.fillStyle = '#fbbf24'
+        ctx.fillText(text, cluster.x, cluster.y)
       }
 
       rafRef.current = requestAnimationFrame(tick)
@@ -549,59 +754,220 @@ export function GameCanvas({
 
   useEffect(() => {
     const updateScale = () => {
-      const container = canvasRef.current?.parentElement
+      const container = viewportRef.current
       if (!container) return
       const fit = Math.floor(Math.min(container.clientWidth / CANVAS_W, 1.6))
-      setScale(Math.max(1, fit))
+      setFitScale(Math.max(1, fit))
     }
     updateScale()
     window.addEventListener('resize', updateScale)
     return () => window.removeEventListener('resize', updateScale)
   }, [])
 
-  const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    const x = ((e.clientX - rect.left) / rect.width) * CANVAS_W
-    const y = ((e.clientY - rect.top) / rect.height) * CANVAS_H
+  useEffect(() => {
+    const viewport = viewportRef.current
+    if (!viewport) return
+    setPan((prev) =>
+      clampPan(prev, userZoom, fitScale, viewport.clientWidth, viewport.clientHeight),
+    )
+  }, [userZoom, fitScale])
 
-    let closest: { id: string; dist: number } | null = null
+  const canvasToLogical = useCallback((clientX: number, clientY: number) => {
+    const viewport = viewportRef.current
+    if (!viewport) return null
+
+    const rect = viewport.getBoundingClientRect()
+    const scale = fitScaleRef.current * userZoomRef.current
+    const contentW = CANVAS_W * scale
+    const contentH = CANVAS_H * scale
+    const offsetX = (viewport.clientWidth - contentW) / 2 + panRef.current.x
+    const offsetY = (viewport.clientHeight - contentH) / 2 + panRef.current.y
+
+    const localX = clientX - rect.left - offsetX
+    const localY = clientY - rect.top - offsetY
+
+    return { x: localX / scale, y: localY / scale }
+  }, [])
+
+  const handleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isDraggingRef.current) return
+    const coords = canvasToLogical(e.clientX, e.clientY)
+    if (!coords) return
+    const { x, y } = coords
+
+    let closest: { id: string; dist: number; floor: number } | null = null
     for (const entity of entitiesRef.current.values()) {
+      const floorHeight = Math.round(entity.displayHeight)
+      const peerCount = [...entitiesRef.current.values()].filter(
+        (e) => Math.round(e.displayHeight) === floorHeight,
+      ).length
+      const crowded = peerCount > CROWDED_FLOOR_THRESHOLD
+      const spriteSize = crowded ? DISPLAY_SIZE * 0.82 : DISPLAY_SIZE
+
       const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
-      const px = (CANVAS_W - pw) / 2
+      const px = CENTER_X - pw / 2
       const floorY = yForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
       const charX = px + entity.floorX * pw
-      const charY = charYOnFloor(floorY, 0) + DISPLAY_SIZE / 2
+      const charY = charYOnFloor(floorY, 0) + spriteSize / 2
       const dx = x - charX
       const dy = y - charY
       const dist = Math.sqrt(dx * dx + dy * dy)
-      if (dist < DISPLAY_SIZE * 0.65 && (!closest || dist < closest.dist)) {
-        closest = { id: entity.impId, dist }
+      if (dist < spriteSize * 0.65 && (!closest || dist < closest.dist)) {
+        closest = { id: entity.impId, dist, floor: floorHeight }
       }
     }
-    if (closest) onSelectImp(BigInt(closest.id))
+
+    if (closest) {
+      const peerCount = [...entitiesRef.current.values()].filter(
+        (e) => Math.round(e.displayHeight) === closest!.floor,
+      ).length
+      if (peerCount > CROWDED_FLOOR_THRESHOLD) {
+        setExpandedFloor((prev) => (prev === closest!.floor ? null : closest!.floor))
+      }
+      onSelectImp(BigInt(closest.id))
+    }
+  }
+
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP
+    setUserZoom((z) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round((z + delta) * 2) / 2)))
+  }
+
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (userZoom <= 1) return
+    isDraggingRef.current = false
+    dragStartRef.current = { x: e.clientX, y: e.clientY, panX: panRef.current.x, panY: panRef.current.y }
+    viewportRef.current?.setPointerCapture(e.pointerId)
+  }
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (userZoom <= 1) return
+    const dx = e.clientX - dragStartRef.current.x
+    const dy = e.clientY - dragStartRef.current.y
+    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) isDraggingRef.current = true
+    const viewport = viewportRef.current
+    if (!viewport) return
+    setPan(
+      clampPan(
+        {
+          x: dragStartRef.current.panX + dx,
+          y: dragStartRef.current.panY + dy,
+        },
+        userZoom,
+        fitScale,
+        viewport.clientWidth,
+        viewport.clientHeight,
+      ),
+    )
+  }
+
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    viewportRef.current?.releasePointerCapture(e.pointerId)
+    window.setTimeout(() => {
+      isDraggingRef.current = false
+    }, 0)
+  }
+
+  const zoomIn = () =>
+    setUserZoom((z) => Math.min(MAX_ZOOM, Math.round((z + ZOOM_STEP) * 2) / 2))
+  const zoomOut = () =>
+    setUserZoom((z) => {
+      const next = Math.max(MIN_ZOOM, Math.round((z - ZOOM_STEP) * 2) / 2)
+      if (next <= 1) setPan({ x: 0, y: 0 })
+      return next
+    })
+  const resetView = () => {
+    setUserZoom(1)
+    setPan({ x: 0, y: 0 })
+    setExpandedFloor(null)
   }
 
   return (
-    <div className="relative w-full overflow-x-auto">
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_W}
-        height={CANVAS_H}
+    <div className="relative w-full">
+      <div
+        ref={viewportRef}
+        className="relative w-full overflow-hidden rounded-lg bg-zinc-950/40"
+        style={{ height: baseDisplayHeight }}
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
         onClick={handleClick}
-        className="mx-auto cursor-pointer"
-        style={{
-          width: CANVAS_W * scale,
-          height: CANVAS_H * scale,
-          imageRendering: 'pixelated',
-        }}
-      />
-      {!ready && (
-        <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/60 text-sm text-zinc-400">
-          Loading sprites…
+      >
+        <div
+          className="absolute left-1/2 top-1/2"
+          style={{
+            width: displayWidth,
+            height: displayHeight,
+            transform: `translate(calc(-50% + ${pan.x}px), calc(-50% + ${pan.y}px))`,
+            cursor: userZoom > 1 ? 'grab' : 'pointer',
+          }}
+        >
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_W}
+            height={CANVAS_H}
+            className="block"
+            style={{
+              width: displayWidth,
+              height: displayHeight,
+              imageRendering: 'pixelated',
+            }}
+          />
         </div>
-      )}
+
+        {!ready && (
+          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/60 text-sm text-zinc-400 z-20">
+            Loading sprites…
+          </div>
+        )}
+      </div>
+
+      <div className="absolute top-2 right-2 z-20 flex items-center gap-1">
+        <button
+          type="button"
+          onClick={zoomOut}
+          disabled={userZoom <= MIN_ZOOM}
+          className="w-7 h-7 rounded bg-zinc-800/90 border border-zinc-700 text-zinc-200 text-sm font-bold hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Zoom out"
+          aria-label="Zoom out"
+        >
+          −
+        </button>
+        <span className="px-1.5 text-xs font-mono text-zinc-400 min-w-[2.5rem] text-center">
+          {userZoom.toFixed(1)}×
+        </span>
+        <button
+          type="button"
+          onClick={zoomIn}
+          disabled={userZoom >= MAX_ZOOM}
+          className="w-7 h-7 rounded bg-zinc-800/90 border border-zinc-700 text-zinc-200 text-sm font-bold hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Zoom in"
+          aria-label="Zoom in"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          onClick={resetView}
+          className="h-7 px-2 rounded bg-zinc-800/90 border border-zinc-700 text-zinc-300 text-xs hover:bg-zinc-700"
+          title="Reset zoom and pan"
+        >
+          Reset
+        </button>
+        {selectedImpId !== null && (
+          <button
+            type="button"
+            onClick={focusSelectedPepe}
+            className="h-7 px-2 rounded bg-violet-900/60 border border-violet-700/50 text-violet-200 text-xs hover:bg-violet-800/60"
+            title="Focus on selected Pepe"
+          >
+            Focus
+          </button>
+        )}
+      </div>
     </div>
   )
 }
