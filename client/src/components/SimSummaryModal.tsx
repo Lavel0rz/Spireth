@@ -1,6 +1,6 @@
 'use client'
 
-import type { SimSummary } from '@/hooks/useSimulateCompetition'
+import type { SimSummary, Top10Entry } from '@/hooks/useSimulateCompetition'
 import { BELL_BONUS_PCT } from '@/hooks/useSimulateCompetition'
 import { FLOOR_MAX, FLOOR_MIN } from '@/lib/gameUtils'
 
@@ -38,7 +38,7 @@ export function SimSummaryModal({
       <div
         role="dialog"
         aria-labelledby="sim-summary-title"
-        className="w-full max-w-md rounded-xl border border-zinc-700 bg-zinc-900/95 p-5 shadow-2xl"
+        className="w-full max-w-lg rounded-xl border border-zinc-700 bg-zinc-900/95 p-5 shadow-2xl"
       >
         <h3 id="sim-summary-title" className="text-lg font-semibold text-zinc-100 mb-1">
           Competition over
@@ -84,11 +84,57 @@ export function SimSummaryModal({
           </div>
         </div>
 
-        <div className="rounded-lg border border-amber-700/40 bg-amber-950/30 px-3 py-2.5 text-xs text-amber-100/90 mb-5">
+        <div className="rounded-lg border border-amber-700/40 bg-amber-950/30 px-3 py-2.5 text-xs text-amber-100/90 mb-4">
           <span className="font-semibold text-amber-200">Bell bonus:</span>{' '}
           Pepe #{summary.winnerId.toString()} earns {formatUsd(summary.bellBonusUsd)} (
           {BELL_BONUS_PCT}% of pool). Remaining pool for survivors:{' '}
           {formatUsd(summary.remainingPoolUsd)} across {summary.livingAtEnd} living Pepes.
+        </div>
+
+        <div className="mb-5">
+          <h4 className="text-xs font-semibold text-zinc-300 mb-2">Top 10 — spend vs payout</h4>
+          <div className="overflow-x-auto rounded-lg border border-zinc-700 bg-zinc-800/40">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-zinc-700 text-zinc-400">
+                  <th className="px-2 py-1.5 text-left font-medium">Pepe</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Floor</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Spent</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Paid</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Net</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.top10.map((entry) => (
+                  <tr
+                    key={entry.id.toString()}
+                    className="border-b border-zinc-700/50 last:border-b-0"
+                  >
+                    <td className="px-2 py-1.5 text-zinc-100">
+                      #{entry.id.toString()}
+                      {entry.isWinner && <span className="ml-1">🔔</span>}
+                    </td>
+                    <td className={`px-2 py-1.5 text-right font-medium ${
+                      entry.height > 0 ? 'text-emerald-400' : entry.height < 0 ? 'text-red-400' : 'text-zinc-300'
+                    }`}>
+                      {entry.height > 0 ? `+${entry.height}` : entry.height}
+                    </td>
+                    <td className="px-2 py-1.5 text-right text-zinc-300">
+                      {formatUsd(entry.spentUsd)}
+                    </td>
+                    <td className="px-2 py-1.5 text-right text-violet-300">
+                      {formatUsd(entry.payoutUsd)}
+                    </td>
+                    <td className={`px-2 py-1.5 text-right font-medium ${
+                      entry.netUsd > 0 ? 'text-emerald-400' : entry.netUsd < 0 ? 'text-red-400' : 'text-zinc-300'
+                    }`}>
+                      {entry.netUsd > 0 ? '+' : ''}{formatUsd(entry.netUsd)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         <div className="flex gap-2 justify-end">
