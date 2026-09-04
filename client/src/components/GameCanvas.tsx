@@ -13,9 +13,10 @@ import {
   FLOOR_MAX,
   FLOOR_MIN,
   PLATFORM_DRAW_H,
+  PLATFORM_MAX_W,
+  PLATFORM_MIN_W,
+  PLATFORM_STRIP_SOURCES,
   PLATFORM_TILE_SIZE,
-  PLATFORM_TILE_SRC_H,
-  PLATFORM_TILE_SRC_Y,
   SPRITE_SIZE,
   floorHalfWidth,
   floorWidth,
@@ -30,8 +31,8 @@ import {
 const CANVAS_W = BOARD_CANVAS_W
 const PADDING_TOP = BOARD_PADDING_TOP
 const FLOOR_GAP = BOARD_FLOOR_GAP
-const MAX_PLATFORM_W = 360
-const MIN_PLATFORM_W = 72
+const MAX_PLATFORM_W = PLATFORM_MAX_W
+const MIN_PLATFORM_W = PLATFORM_MIN_W
 const FOOT_RATIO = 42 / SPRITE_SIZE
 const CANVAS_H = BOARD_CANVAS_H
 const CENTER_X = CANVAS_W / 2
@@ -141,28 +142,33 @@ function drawPlatformStrip(
 ) {
   ctx.imageSmoothingEnabled = false
   const topY = y - PLATFORM_DRAW_H + 2
+  const source = PLATFORM_STRIP_SOURCES[variant]
 
-  const source =
-    variant === 'stone'
-      ? { sx: 80, sy: 0, sw: 48, sh: 16 }
-      : variant === 'hills'
-        ? { sx: 0, sy: 0, sw: 48, sh: 16 }
-        : { sx: 0, sy: PLATFORM_TILE_SRC_Y, sw: PLATFORM_TILE_SIZE, sh: PLATFORM_TILE_SRC_H }
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(px, topY, pw, PLATFORM_DRAW_H)
+  ctx.clip()
 
-  for (let tx = 0; tx < pw; tx += PLATFORM_TILE_SIZE) {
-    const drawW = Math.min(PLATFORM_TILE_SIZE, pw - tx)
-    ctx.drawImage(
-      tile,
-      source.sx,
-      source.sy,
-      Math.min(source.sw, drawW),
-      source.sh,
-      px + tx,
-      topY,
-      drawW,
-      PLATFORM_DRAW_H,
-    )
+  if (pw <= PLATFORM_TILE_SIZE) {
+    ctx.drawImage(tile, source.sx, source.sy, source.sw, source.sh, px, topY, pw, PLATFORM_DRAW_H)
+  } else {
+    for (let tx = 0; tx < pw; tx += PLATFORM_TILE_SIZE) {
+      const drawW = Math.min(PLATFORM_TILE_SIZE, pw - tx)
+      ctx.drawImage(
+        tile,
+        source.sx,
+        source.sy,
+        source.sw,
+        source.sh,
+        px + tx,
+        topY,
+        drawW,
+        PLATFORM_DRAW_H,
+      )
+    }
   }
+
+  ctx.restore()
 }
 
 function drawRhombusOutline(ctx: CanvasRenderingContext2D) {
@@ -605,9 +611,14 @@ export function GameCanvas({
         if (level <= -22) {
           ctx.imageSmoothingEnabled = false
           const waterY = y + 4
+          ctx.save()
+          ctx.beginPath()
+          ctx.rect(px, waterY, pw, 5)
+          ctx.clip()
           for (let tx = 0; tx < pw; tx += 16) {
             ctx.drawImage(sprites.water, 0, 0, 16, sprites.water.height, px + tx, waterY, 16, 5)
           }
+          ctx.restore()
         }
 
         let borderColor = '#52525b'
@@ -756,7 +767,7 @@ export function GameCanvas({
     const updateScale = () => {
       const container = viewportRef.current
       if (!container) return
-      const fit = Math.floor(Math.min(container.clientWidth / CANVAS_W, 1.6))
+      const fit = Math.min(container.clientWidth / CANVAS_W, 2.75)
       setFitScale(Math.max(1, fit))
     }
     updateScale()

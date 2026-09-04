@@ -9,6 +9,17 @@ export const PLATFORM_TILE_SRC_Y = 64
 export const PLATFORM_TILE_SRC_H = 16
 export const PLATFORM_DRAW_H = 14
 
+/** Rhombus platform width at center (level 0) and tips (±25). */
+export const PLATFORM_MAX_W = 360
+export const PLATFORM_MIN_W = 20
+
+export const PLATFORM_STRIP_SOURCES = {
+  grass: { sx: 0, sy: PLATFORM_TILE_SRC_Y, sw: PLATFORM_TILE_SIZE, sh: PLATFORM_TILE_SRC_H },
+  stone: { sx: 80, sy: 0, sw: 48, sh: 16 },
+  /** Flat bottom-row strip — not the hill silhouette at (0,0). */
+  hills: { sx: 0, sy: 80, sw: 48, sh: 16 },
+} as const
+
 export type Direction = 'down' | 'up' | 'left' | 'right'
 
 export const DIRECTION_ROW: Record<Direction, number> = {
