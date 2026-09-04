@@ -11,6 +11,8 @@ import {
   type ImpData,
 } from '@/lib/gameUtils'
 import { useIsDevPlaytest, useSimulateCompetition } from '@/hooks/useSimulateCompetition'
+import { SimStats } from '@/components/SimStats'
+import { SimSummaryModal } from '@/components/SimSummaryModal'
 
 export function Board({
   selectedImpId,
@@ -24,12 +26,21 @@ export function Board({
   const [realImps, setRealImps] = useState<ImpData[]>([])
   const [canvasMetrics, setCanvasMetrics] = useState<GameCanvasDisplayMetrics | null>(null)
   const isDevPlaytest = useIsDevPlaytest()
-  const { active: simActive, simImps, toggle: toggleSimulation } = useSimulateCompetition()
+  const {
+    active: simActive,
+    simVisible,
+    simImps,
+    stats: simStats,
+    summary: simSummary,
+    toggle: toggleSimulation,
+    dismissSummary,
+    runAgain,
+  } = useSimulateCompetition()
 
   const total = totalMinted !== undefined ? Number(totalMinted) : 0
 
   useEffect(() => {
-    if (simActive) return
+    if (simVisible) return
 
     let cancelled = false
 
@@ -65,9 +76,9 @@ export function Board({
       cancelled = true
       clearInterval(interval)
     }
-  }, [total, simActive])
+  }, [total, simVisible])
 
-  const imps = simActive ? simImps : realImps
+  const imps = simVisible ? simImps : realImps
   const livingCount = useMemo(() => imps.filter((i) => !i.isDead).length, [imps])
   const deadCount = imps.length - livingCount
 
@@ -90,21 +101,25 @@ export function Board({
         {imps.length > 0 && (
           <span className="text-xs text-zinc-500 ml-auto">
             {livingCount} living · {deadCount} fallen
-            {simActive ? ' · sim' : ''}
+            {simVisible ? (simActive ? ' · sim' : ' · sim ended') : ''}
           </span>
         )}
         {isDevPlaytest && (
-          <button
-            type="button"
-            onClick={toggleSimulation}
-            className={`text-xs px-2 py-1 rounded border transition-colors ${
-              simActive
-                ? 'border-amber-700/60 bg-amber-950/40 text-amber-300 hover:bg-amber-900/40'
-                : 'border-zinc-700 bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-300'
-            }`}
-          >
-            {simActive ? 'Stop simulation' : 'Simulate competition'}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {simVisible && <SimStats stats={simStats} />}
+            <button
+              type="button"
+              onClick={toggleSimulation}
+              disabled={simVisible && !simActive}
+              className={`text-xs px-2 py-1 rounded border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                simActive
+                  ? 'border-amber-700/60 bg-amber-950/40 text-amber-300 hover:bg-amber-900/40'
+                  : 'border-zinc-700 bg-zinc-800/60 text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-300'
+              }`}
+            >
+              {simActive ? 'Stop simulation' : simSummary ? 'Simulation ended' : 'Simulate competition'}
+            </button>
+          </div>
         )}
       </div>
 
@@ -140,6 +155,13 @@ export function Board({
             onSelectImp={onSelectImp}
             onDisplayMetrics={handleDisplayMetrics}
           />
+          {simSummary && (
+            <SimSummaryModal
+              summary={simSummary}
+              onDismiss={dismissSummary}
+              onRunAgain={runAgain}
+            />
+          )}
         </div>
       </div>
 
