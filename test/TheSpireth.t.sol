@@ -127,15 +127,15 @@ contract TheSpirethTest is Test {
         assertEq(spireth.rollCost(), 0.005 ether);
     }
 
-    function test_FreezeAtPlus25() public {
+    function test_FreezeAtPlus50() public {
         _setupLiveSeason();
         
         uint256 secret = 1;
         bool reachedSummit = false;
         
-        for (uint256 i = 0; i < 100 && !reachedSummit; i++) {
+        for (uint256 i = 0; i < 200 && !reachedSummit; i++) {
             (int8 height, , , , ,) = spireth.getImp(0);
-            if (height >= 25) {
+            if (height >= 50) {
                 reachedSummit = true;
                 break;
             }
@@ -156,19 +156,19 @@ contract TheSpirethTest is Test {
             secret++;
         }
         
-        assertEq(spireth.SUMMIT(), int8(25));
-        assertEq(spireth.ABYSS(), int8(-25));
+        assertEq(spireth.SUMMIT(), int8(50));
+        assertEq(spireth.ABYSS(), int8(-50));
     }
 
-    function test_FreezeAtMinus25() public {
+    function test_FreezeAtMinus50() public {
         _setupLiveSeason();
         
         uint256 secret = 1;
         bool reachedAbyss = false;
         
-        for (uint256 i = 0; i < 100 && !reachedAbyss; i++) {
+        for (uint256 i = 0; i < 200 && !reachedAbyss; i++) {
             (int8 height, , , , ,) = spireth.getImp(0);
-            if (height <= -25) {
+            if (height <= -50) {
                 reachedAbyss = true;
                 break;
             }
@@ -189,8 +189,8 @@ contract TheSpirethTest is Test {
             secret++;
         }
         
-        assertEq(spireth.SUMMIT(), int8(25));
-        assertEq(spireth.ABYSS(), int8(-25));
+        assertEq(spireth.SUMMIT(), int8(50));
+        assertEq(spireth.ABYSS(), int8(-50));
     }
 
     function test_EquipPfp() public {

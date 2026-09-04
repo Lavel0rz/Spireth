@@ -1,5 +1,5 @@
-export const FLOOR_MIN = -25
-export const FLOOR_MAX = 25
+export const FLOOR_MIN = -50
+export const FLOOR_MAX = 50
 export const SPRITE_SIZE = 48
 export const DISPLAY_SIZE = 14
 export const FRAME_COLS = 4
@@ -9,7 +9,7 @@ export const PLATFORM_TILE_SRC_Y = 64
 export const PLATFORM_TILE_SRC_H = 16
 export const PLATFORM_DRAW_H = 14
 
-/** Rhombus platform width at center (level 0) and tips (±25). */
+/** Rhombus platform width at center (level 0) and tips (±50). */
 export const PLATFORM_MAX_W = 360
 export const PLATFORM_MIN_W = 20
 
@@ -49,9 +49,20 @@ export function floorHalfWidth(level: number, maxWidth: number, minWidth: number
 /** Board layout constants shared by Board meter + GameCanvas. */
 export const BOARD_CANVAS_W = 440
 export const BOARD_PADDING_TOP = 28
-export const BOARD_FLOOR_GAP = 11
+/** Vertical spacing between floors — tuned so 101 levels fit fullscreen when scaled. */
+export const BOARD_FLOOR_GAP = 6
 export const BOARD_CANVAS_H =
   BOARD_PADDING_TOP + (FLOOR_MAX - FLOOR_MIN) * BOARD_FLOOR_GAP + 40
+
+/** Show summit/abyss/0 and every 10th floor so labels stay readable. */
+export function shouldShowFloorLabel(level: number): boolean {
+  return (
+    level === FLOOR_MAX ||
+    level === FLOOR_MIN ||
+    level === 0 ||
+    level % 10 === 0
+  )
+}
 
 export const RHOMBUS_SUMMIT_Y = BOARD_PADDING_TOP
 export const RHOMBUS_ABYSS_Y = yForLevel(FLOOR_MIN, BOARD_PADDING_TOP, BOARD_FLOOR_GAP)

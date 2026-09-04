@@ -1,4 +1,5 @@
 const CHIPS = [
+  { icon: '⬥', label: 'Board', detail: '±50 floors' },
   { icon: '🎲', label: 'Dice', detail: '±1 to ±4' },
   { icon: '⏰', label: 'Roll', detail: 'Once/24h' },
   { icon: '💀', label: 'Death', detail: '72h idle' },
@@ -9,7 +10,7 @@ export function RuleChips() {
   return (
     <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-4">
       <h3 className="text-sm font-semibold text-zinc-400 mb-3">How It Works</h3>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {CHIPS.map((chip) => (
           <div
             key={chip.label}
