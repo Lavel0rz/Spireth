@@ -3,7 +3,10 @@ export const FLOOR_MAX = 50
 /** pet.game Pepe sheet cell size (336×44, 12 cols × 2 rows, black bg). */
 export const FRAME_W = 28
 export const FRAME_H = 22
-export const DISPLAY_SIZE = 14
+/** Canvas draw height for one Pepe (preserves 28:22 aspect via DISPLAY_WIDTH). */
+export const DISPLAY_HEIGHT = 20
+export const DISPLAY_SCALE = DISPLAY_HEIGHT / FRAME_H
+export const DISPLAY_WIDTH = FRAME_W * DISPLAY_SCALE
 /** Source-pixel Y where feet meet the ground (for platform alignment). */
 export const FRAME_FOOT_Y = 20
 
@@ -19,7 +22,8 @@ export interface PepeFrame {
 }
 
 const WALK_FRONT_COLS = [0, 1, 2, 3]
-const WALK_SIDE_COLS = [0, 1, 2, 3]
+/** Skip col 0 — side profile is very narrow in-cell; cols 1–3 read clearer on the board. */
+const WALK_SIDE_COLS = [1, 2, 3, 2]
 const JUMP_SIDE_COLS = [1, 2]
 const REVEAL_COLS = [0, 2]
 
