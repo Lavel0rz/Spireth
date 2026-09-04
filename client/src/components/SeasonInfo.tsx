@@ -56,7 +56,7 @@ export function SeasonInfo() {
           <div className="text-lg font-bold text-violet-400">{pool} ETH</div>
         </div>
         <div className="space-y-1">
-          <div className="text-xs uppercase tracking-wider text-zinc-500">Imps Minted</div>
+          <div className="text-xs uppercase tracking-wider text-zinc-500">Players Joined</div>
           <div className="text-lg font-bold text-zinc-200">{minted}</div>
         </div>
         <div className="space-y-1">

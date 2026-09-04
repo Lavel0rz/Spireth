@@ -6,7 +6,10 @@
     "dev": "next dev -p 3847",
     "build": "next build",
     "start": "next start -p 3847",
-    "lint": "eslint"
+    "lint": "eslint",
+    "assets:decode": "node scripts/decode-game-assets.cjs",
+    "assets:encode": "node scripts/encode-game-assets.mjs",
+    "assets:generate": "node scripts/generate-assets.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.102.8",

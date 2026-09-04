@@ -23,6 +23,7 @@ import {
   useEquipPfp,
   useClearPfp,
 } from '@/hooks/useSpireth'
+import { useGameAnimation } from '@/context/GameAnimationContext'
 
 function formatTime(seconds: bigint | number | undefined): string {
   if (seconds === undefined) return '...'
@@ -68,7 +69,14 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   const { equipPfp, isPending: isEquipping, isConfirming: isEquipConfirming } = useEquipPfp(impId ?? ZERO)
   const { clearPfp, isPending: isClearing, isConfirming: isClearConfirming } = useClearPfp(impId ?? ZERO)
   
-  const [pendingSecret, setPendingSecret] = useState<bigint | null>(null)
+  const { triggerCommit, triggerRevealPending } = useGameAnimation()
+
+  const [pendingSecret, setPendingSecret] = useState<bigint | null>(() => {
+    if (typeof window === 'undefined' || impId === null) return null
+    const stored = localStorage.getItem(`spireth_secret_${impId}`)
+    return stored ? BigInt(stored) : null
+  })
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [showPfpForm, setShowPfpForm] = useState(false)
   const [pfpContract, setPfpContract] = useState('')
   const [pfpTokenId, setPfpTokenId] = useState('')
@@ -116,6 +124,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
     setPendingSecret(secret)
     if (impId !== null) {
       localStorage.setItem(`spireth_secret_${impId}`, secret.toString())
+      triggerCommit(impId)
     }
     commitRoll(secret)
   }
@@ -127,6 +136,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
       if (stored) secret = BigInt(stored)
     }
     if (secret) {
+      if (impId !== null) triggerRevealPending(impId)
       revealRoll(secret)
       if (impId !== null) {
         localStorage.removeItem(`spireth_secret_${impId}`)
@@ -136,16 +146,18 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   }
 
   useEffect(() => {
-    if (impId !== null) {
-      const stored = localStorage.getItem(`spireth_secret_${impId}`)
-      if (stored) setPendingSecret(BigInt(stored))
-    }
+    if (impId === null) return
+    const stored = localStorage.getItem(`spireth_secret_${impId}`)
+    const timer = window.setTimeout(() => {
+      setPendingSecret(stored ? BigInt(stored) : null)
+    }, 0)
+    return () => window.clearTimeout(timer)
   }, [impId])
 
   if (!address) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Imp</h2>
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Character</h2>
         <p className="text-zinc-400">Connect your wallet to play.</p>
       </div>
     )
@@ -154,18 +166,18 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   if (canJoin) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Race</h2>
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Spireth</h2>
         <p className="text-zinc-400 mb-4">
           {isLive
-            ? 'The horn has sounded, but late joiners are welcome. Mint your Imp to enter the climb.'
-            : 'Mint your Imp to join The Spireth. Free mint, one per wallet.'}
+            ? 'The horn has sounded, but late joiners are welcome. One character per wallet — join and appear on the tower.'
+            : 'One character per wallet. Join free during signup and appear on the tower.'}
         </p>
         <button
           onClick={() => mint()}
           disabled={isMinting || isMintConfirming}
           className="w-full px-4 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold rounded-lg transition disabled:opacity-50"
         >
-          {isMinting ? 'Confirming...' : isMintConfirming ? 'Minting...' : 'Join — Mint Your Imp'}
+          {isMinting ? 'Confirm in wallet…' : isMintConfirming ? 'Joining…' : 'Join'}
         </button>
       </div>
     )
@@ -196,8 +208,8 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   if (impId === null) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Imp</h2>
-        <p className="text-zinc-400">Select an Imp on the board or enter its ID.</p>
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Character</h2>
+        <p className="text-zinc-400">Select your character on the board.</p>
       </div>
     )
   }
@@ -302,60 +314,72 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
       
       {isOwner && (
         <div className="border-t border-zinc-800 pt-4 space-y-3">
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold text-zinc-400">Profile Picture</h3>
-            {hasPfp ? (
-              <button
-                onClick={() => clearPfp()}
-                disabled={isClearing || isClearConfirming}
-                className="text-xs px-2 py-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 transition disabled:opacity-50"
-              >
-                {isClearing || isClearConfirming ? 'Clearing...' : 'Clear PFP'}
-              </button>
-            ) : (
-              <button
-                onClick={() => setShowPfpForm(!showPfpForm)}
-                className="text-xs px-2 py-1 bg-violet-500/20 text-violet-400 rounded hover:bg-violet-500/30 transition"
-              >
-                {showPfpForm ? 'Cancel' : 'Equip PFP'}
-              </button>
-            )}
-          </div>
-          
-          {hasPfp && (
-            <div className="text-xs text-zinc-500">
-              <div className="truncate">NFT: {pfpNft}</div>
-              <div>Token ID: {pfpTokenIdValue.toString()}</div>
-            </div>
-          )}
-          
-          {showPfpForm && !hasPfp && (
-            <div className="space-y-2">
-              <input
-                type="text"
-                placeholder="NFT Contract Address (0x...)"
-                value={pfpContract}
-                onChange={(e) => setPfpContract(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-violet-500"
-              />
-              <input
-                type="text"
-                placeholder="Token ID"
-                value={pfpTokenId}
-                onChange={(e) => setPfpTokenId(e.target.value)}
-                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-violet-500"
-              />
-              <button
-                onClick={handleEquipPfp}
-                disabled={isEquipping || isEquipConfirming || !pfpContract || !pfpTokenId}
-                className="w-full px-3 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-sm font-semibold rounded transition disabled:opacity-50"
-              >
-                {isEquipping ? 'Confirming...' : isEquipConfirming ? 'Equipping...' : 'Equip NFT as PFP'}
-              </button>
-              <p className="text-xs text-zinc-500">
-                You must own both the Imp and the NFT to equip it as your profile picture.
-              </p>
-            </div>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="text-xs text-zinc-500 hover:text-zinc-300 transition"
+          >
+            {showAdvanced ? '▾ Hide advanced' : '▸ Advanced options'}
+          </button>
+
+          {showAdvanced && (
+            <>
+              <div className="flex justify-between items-center">
+                <h3 className="text-sm font-semibold text-zinc-400">Profile Picture</h3>
+                {hasPfp ? (
+                  <button
+                    onClick={() => clearPfp()}
+                    disabled={isClearing || isClearConfirming}
+                    className="text-xs px-2 py-1 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 transition disabled:opacity-50"
+                  >
+                    {isClearing || isClearConfirming ? 'Clearing...' : 'Clear PFP'}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowPfpForm(!showPfpForm)}
+                    className="text-xs px-2 py-1 bg-violet-500/20 text-violet-400 rounded hover:bg-violet-500/30 transition"
+                  >
+                    {showPfpForm ? 'Cancel' : 'Equip PFP'}
+                  </button>
+                )}
+              </div>
+
+              {hasPfp && (
+                <div className="text-xs text-zinc-500">
+                  <div className="truncate">NFT: {pfpNft}</div>
+                  <div>Token ID: {pfpTokenIdValue.toString()}</div>
+                </div>
+              )}
+
+              {showPfpForm && !hasPfp && (
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    placeholder="NFT Contract Address (0x...)"
+                    value={pfpContract}
+                    onChange={(e) => setPfpContract(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-violet-500"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Token ID"
+                    value={pfpTokenId}
+                    onChange={(e) => setPfpTokenId(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-violet-500"
+                  />
+                  <button
+                    onClick={handleEquipPfp}
+                    disabled={isEquipping || isEquipConfirming || !pfpContract || !pfpTokenId}
+                    className="w-full px-3 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-sm font-semibold rounded transition disabled:opacity-50"
+                  >
+                    {isEquipping ? 'Confirming...' : isEquipConfirming ? 'Equipping...' : 'Equip NFT as PFP'}
+                  </button>
+                  <p className="text-xs text-zinc-500">
+                    You must own both the Imp and the NFT to equip it as your profile picture.
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

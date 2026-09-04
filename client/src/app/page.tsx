@@ -78,10 +78,9 @@ export default function Home() {
               </div>
             </div>
 
-            <Board 
-              selectedImpId={selectedImpId} 
+            <Board
+              selectedImpId={selectedImpId}
               onSelectImp={setSelectedImpId}
-              userImpId={hasMinted ? selectedImpId ?? ownedImpId ?? undefined : undefined}
             />
           </div>
 
@@ -94,7 +93,7 @@ export default function Home() {
               <ul className="space-y-2 text-sm text-zinc-500">
                 <li className="flex gap-2">
                   <span className="text-emerald-400">◈</span>
-                  <span>Free mint during signup or live season</span>
+                  <span>Free join during signup or live season</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="text-amber-400">◈</span>
