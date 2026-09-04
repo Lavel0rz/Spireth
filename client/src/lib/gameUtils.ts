@@ -100,6 +100,13 @@ export function shortAddress(address: string): string {
   return `${address.slice(0, 6)}…${address.slice(-4)}`
 }
 
+/** Duration of a single smooth floor jump (ms), shared by canvas + sim height sync. */
+export function jumpDurationMs(from: number, to: number): number {
+  const delta = Math.abs(to - from)
+  if (delta === 0) return 0
+  return 280 + delta * 80
+}
+
 export interface LaneBounds {
   min: number
   max: number
