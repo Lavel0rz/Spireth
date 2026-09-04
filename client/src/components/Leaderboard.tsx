@@ -5,7 +5,13 @@ import { useOwnedImpId } from '@/hooks/useSpireth'
 import { useLeaderboard } from '@/hooks/useLeaderboard'
 import { formatFloorLabel } from '@/lib/leaderboardUtils'
 
-export function Leaderboard() {
+export function Leaderboard({
+  selectedImpId,
+  onSelectImp,
+}: {
+  selectedImpId?: bigint | null
+  onSelectImp?: (id: bigint) => void
+}) {
   const { address } = useAccount()
   const { impId: ownedImpId } = useOwnedImpId(address)
   const { topEntries, aliveCount, totalPlayers, isLoading, isEmpty } = useLeaderboard(10)
@@ -40,23 +46,29 @@ export function Leaderboard() {
           {topEntries.map((entry, index) => {
             const isOwned =
               ownedImpId !== null && entry.id === ownedImpId
+            const isSelected = selectedImpId !== null && selectedImpId !== undefined && entry.id === selectedImpId
             const rank = index + 1
 
             return (
-              <div
+              <button
                 key={entry.id.toString()}
-                className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${
-                  isOwned
-                    ? 'bg-violet-500/15 ring-1 ring-violet-500/40'
-                    : 'hover:bg-zinc-800/50'
-                }`}
+                type="button"
+                onClick={() => onSelectImp?.(entry.id)}
+                disabled={!onSelectImp}
+                className={`w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-left transition-colors ${
+                  isSelected
+                    ? 'bg-violet-500/20 ring-1 ring-violet-400/50'
+                    : isOwned
+                      ? 'bg-violet-500/15 ring-1 ring-violet-500/40'
+                      : 'hover:bg-zinc-800/50'
+                } ${onSelectImp ? 'cursor-pointer' : 'cursor-default'}`}
               >
                 <span className="w-6 text-right font-mono text-zinc-500">
                   {rank}
                 </span>
                 <span
                   className={`flex-1 font-medium ${
-                    isOwned ? 'text-violet-300' : 'text-zinc-200'
+                    isOwned || isSelected ? 'text-violet-300' : 'text-zinc-200'
                   }`}
                 >
                   Pepe #{entry.id.toString()}
@@ -84,7 +96,7 @@ export function Leaderboard() {
                 >
                   {entry.isDead ? 'Dead' : 'Alive'}
                 </span>
-              </div>
+              </button>
             )
           })}
         </div>
