@@ -43,6 +43,10 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     uint256 public constant REVEAL_WINDOW = 256;
     uint256 public constant REVEAL_DELAY = 3;
     
+    uint256 public constant BILLBOARD_MIN_INCREMENT = 0.001 ether;
+    uint256 public constant BILLBOARD_URL_MAX = 200;
+    uint256 public constant BILLBOARD_LABEL_MAX = 64;
+    
     enum SeasonState { Signup, Live, Frozen }
     
     struct Imp {
@@ -92,6 +96,11 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     
     uint256 public pendingDevFees;
     
+    string public billboardUrl;
+    string public billboardLabel;
+    uint256 public billboardBid;
+    address public billboardBidder;
+    
     event ImpMinted(address indexed owner, uint256 indexed impId);
     event HornSounded(uint256 timestamp);
     event RollCommitted(uint256 indexed impId, bytes32 commitment);
@@ -107,6 +116,8 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     event DevFeeAccrued(uint256 amount);
     event DevFeesWithdrawn(address indexed to, uint256 amount);
     event DustSwept(address indexed to, uint256 amount);
+    event BillboardBid(address indexed bidder, uint256 amount, string url, string label);
+    event BillboardCleared(address indexed by);
     
     error NotInSignup();
     error NotLive();
@@ -138,6 +149,9 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     error InvalidProof();
     error NotBellRinger();
     error ExceedsRankPool();
+    error BidTooLow();
+    error InvalidUrl();
+    error InvalidLabel();
     
     constructor(
         address _owner,
@@ -532,5 +546,100 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         if (!success) revert TransferFailed();
         
         emit DustSwept(to, sweepable);
+    }
+    
+    function _validateBillboard(string calldata url, string calldata label) internal pure {
+        bytes memory urlBytes = bytes(url);
+        bytes memory labelBytes = bytes(label);
+        
+        if (urlBytes.length == 0 || urlBytes.length > BILLBOARD_URL_MAX) revert InvalidUrl();
+        if (labelBytes.length == 0 || labelBytes.length > BILLBOARD_LABEL_MAX) revert InvalidLabel();
+        
+        if (urlBytes.length < 8) revert InvalidUrl();
+        if (
+            urlBytes[0] != 0x68 || // h
+            urlBytes[1] != 0x74 || // t
+            urlBytes[2] != 0x74 || // t
+            urlBytes[3] != 0x70 || // p
+            urlBytes[4] != 0x73 || // s
+            urlBytes[5] != 0x3a || // :
+            urlBytes[6] != 0x2f || // /
+            urlBytes[7] != 0x2f    // /
+        ) revert InvalidUrl();
+        
+        bool foundSlashAfterHost = false;
+        for (uint256 i = 8; i < urlBytes.length; i++) {
+            bytes1 c = urlBytes[i];
+            
+            if (c == 0x60 || // `
+                c == 0x22 || // "
+                c == 0x27 || // '
+                c == 0x3c || // <
+                c == 0x3e || // >
+                c == 0x5c || // \
+                c == 0x20 || // space
+                c == 0x09 || // tab
+                c == 0x0a || // newline
+                c == 0x0d || // carriage return
+                c == 0x00    // null
+            ) revert InvalidUrl();
+            
+            if (c == 0x2f) foundSlashAfterHost = true;
+            if (c == 0x40 && !foundSlashAfterHost) revert InvalidUrl();
+        }
+        
+        for (uint256 i = 0; i < labelBytes.length; i++) {
+            bytes1 c = labelBytes[i];
+            if (c == 0x3c || c == 0x3e || c == 0x60 || c == 0x00) revert InvalidLabel();
+        }
+    }
+    
+    function bidBillboard(string calldata url, string calldata label) external payable nonReentrant {
+        if (seasonState != SeasonState.Live) revert NotLive();
+        
+        uint256 minBid = billboardBid == 0 
+            ? BILLBOARD_MIN_INCREMENT 
+            : billboardBid + BILLBOARD_MIN_INCREMENT;
+        if (msg.value < minBid) revert BidTooLow();
+        
+        _validateBillboard(url, label);
+        
+        uint256 devShare = msg.value * 10 / 100;
+        uint256 poolShare = msg.value - devShare;
+        prizePool += poolShare;
+        
+        (bool success, ) = dev.call{value: devShare}("");
+        if (!success) {
+            pendingDevFees += devShare;
+            emit DevFeeAccrued(devShare);
+        }
+        
+        billboardUrl = url;
+        billboardLabel = label;
+        billboardBid = msg.value;
+        billboardBidder = msg.sender;
+        
+        emit BillboardBid(msg.sender, msg.value, url, label);
+    }
+    
+    function clearBillboard() external onlyOwner {
+        billboardUrl = "";
+        billboardLabel = "";
+        emit BillboardCleared(msg.sender);
+    }
+    
+    function nextBillboardBid() external view returns (uint256) {
+        return billboardBid == 0 
+            ? BILLBOARD_MIN_INCREMENT 
+            : billboardBid + BILLBOARD_MIN_INCREMENT;
+    }
+    
+    function getBillboard() external view returns (
+        string memory url,
+        string memory label,
+        uint256 bid,
+        address bidder
+    ) {
+        return (billboardUrl, billboardLabel, billboardBid, billboardBidder);
     }
 }

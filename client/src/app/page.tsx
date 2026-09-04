@@ -7,6 +7,7 @@ import { SeasonInfo } from '@/components/SeasonInfo'
 import { Leaderboard } from '@/components/Leaderboard'
 import { Board } from '@/components/Board'
 import { ImpPanel } from '@/components/ImpPanel'
+import { BillboardPanel } from '@/components/BillboardPanel'
 import { RuleChips } from '@/components/RuleChips'
 import { useHasMinted, useOwnedImpId } from '@/hooks/useSpireth'
 
@@ -59,6 +60,7 @@ export default function Home() {
               onSelectImp={setSelectedImpId}
             />
             <ImpPanel impId={selectedImpId} />
+            <BillboardPanel />
 
             <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-4 shrink-0">
               <h3 className="text-sm font-semibold text-zinc-400 mb-3">Quick Rules</h3>

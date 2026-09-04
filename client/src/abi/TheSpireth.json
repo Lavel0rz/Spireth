@@ -40,6 +40,45 @@
   },
   {
     "type": "function",
+    "name": "BILLBOARD_LABEL_MAX",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "BILLBOARD_MIN_INCREMENT",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "BILLBOARD_URL_MAX",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "DEATH_THRESHOLD",
     "inputs": [],
     "outputs": [
@@ -207,6 +246,76 @@
   },
   {
     "type": "function",
+    "name": "bidBillboard",
+    "inputs": [
+      {
+        "name": "url",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
+    "name": "billboardBid",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "billboardBidder",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "billboardLabel",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "billboardUrl",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "canReveal",
     "inputs": [
       {
@@ -270,6 +379,13 @@
         "internalType": "bytes32[]"
       }
     ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "clearBillboard",
+    "inputs": [],
     "outputs": [],
     "stateMutability": "nonpayable"
   },
@@ -410,6 +526,34 @@
     "outputs": [
       {
         "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getBillboard",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "url",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "bid",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "bidder",
         "type": "address",
         "internalType": "address"
       }
@@ -673,6 +817,19 @@
         "name": "",
         "type": "string",
         "internalType": "string"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "nextBillboardBid",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -1217,6 +1374,50 @@
   },
   {
     "type": "event",
+    "name": "BillboardBid",
+    "inputs": [
+      {
+        "name": "bidder",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "url",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      },
+      {
+        "name": "label",
+        "type": "string",
+        "indexed": false,
+        "internalType": "string"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BillboardCleared",
+    "inputs": [
+      {
+        "name": "by",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "DevFeeAccrued",
     "inputs": [
       {
@@ -1530,6 +1731,11 @@
   },
   {
     "type": "error",
+    "name": "BidTooLow",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "ERC721IncorrectOwner",
     "inputs": [
       {
@@ -1658,7 +1864,17 @@
   },
   {
     "type": "error",
+    "name": "InvalidLabel",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidProof",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidUrl",
     "inputs": []
   },
   {

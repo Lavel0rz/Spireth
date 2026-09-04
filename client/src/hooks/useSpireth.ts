@@ -373,3 +373,45 @@ export function useClearPfp(impId: bigint) {
 
   return { clearPfp, isPending, isConfirming, isSuccess, error, hash }
 }
+
+export function useBillboard() {
+  const address = useContractAddress()
+  return useReadContract({
+    address,
+    abi: SPIRETH_ABI,
+    functionName: 'getBillboard',
+    query: { refetchInterval: 5000 },
+  })
+}
+
+export function useNextBillboardBid() {
+  const address = useContractAddress()
+  return useReadContract({
+    address,
+    abi: SPIRETH_ABI,
+    functionName: 'nextBillboardBid',
+    query: { refetchInterval: 5000 },
+  })
+}
+
+export function useBidBillboard() {
+  const address = useContractAddress()
+  const invalidateReads = useInvalidateSpirethReads()
+  const { writeContract, data: hash, isPending, error, reset } = useWriteContract()
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+
+  useInvalidateOnReceiptSuccess(isSuccess, reset)
+
+  const bidBillboard = (url: string, label: string, value: bigint) => {
+    if (!address) return
+    writeContract({
+      address,
+      abi: SPIRETH_ABI,
+      functionName: 'bidBillboard',
+      args: [url, label],
+      value,
+    })
+  }
+
+  return { bidBillboard, isPending, isConfirming, isSuccess, error, hash }
+}
