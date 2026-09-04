@@ -289,7 +289,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
           {pending ? (
             <div className="space-y-3">
               <div className="text-sm text-amber-400">
-                Roll pending - reveal to complete!
+                Roll pending - reveal unlocks after ~3 blocks!
               </div>
               <button
                 onClick={handleReveal}
