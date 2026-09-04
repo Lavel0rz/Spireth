@@ -1,7 +1,7 @@
 export const FLOOR_MIN = -25
 export const FLOOR_MAX = 25
 export const SPRITE_SIZE = 48
-export const DISPLAY_SIZE = 28
+export const DISPLAY_SIZE = 14
 export const FRAME_COLS = 4
 
 export const PLATFORM_TILE_SIZE = 48
