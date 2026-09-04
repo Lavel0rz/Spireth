@@ -36,6 +36,7 @@ import {
   type ImpData,
   type PepeFrame,
 } from '@/lib/gameUtils'
+import type { BillboardData } from '@/components/Board'
 
 const CANVAS_W = BOARD_CANVAS_W
 const PADDING_TOP = BOARD_PADDING_TOP
@@ -49,6 +50,8 @@ const CROWDED_FLOOR_THRESHOLD = 4
 const CROWDED_SPRITE_SCALE = 0.88
 const JUMP_ARC_HEIGHT = 7
 const COMMIT_BOUNCE = { dip: 1, peak: -5, settle: -2 } as const
+const BILLBOARD_PLATFORM_H = 20
+const BILLBOARD_STRIP_H = 16
 
 type AnimState = 'walk' | 'commit' | 'revealPending' | 'jump' | 'dead'
 
@@ -326,11 +329,13 @@ export function GameCanvas({
   selectedImpId,
   onSelectImp,
   onDisplayMetrics,
+  billboard,
 }: {
   imps: ImpData[]
   selectedImpId: bigint | null
   onSelectImp: (id: bigint) => void
   onDisplayMetrics?: (metrics: GameCanvasDisplayMetrics) => void
+  billboard: BillboardData | null
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -346,12 +351,14 @@ export function GameCanvas({
   const selectedRef = useRef(selectedImpId)
   const expandedFloorRef = useRef<number | null>(null)
   const [expandedFloor, setExpandedFloor] = useState<number | null>(null)
+  const billboardRef = useRef(billboard)
 
   useEffect(() => {
     impsRef.current = imps
     selectedRef.current = selectedImpId
     expandedFloorRef.current = expandedFloor
-  }, [imps, selectedImpId, expandedFloor])
+    billboardRef.current = billboard
+  }, [imps, selectedImpId, expandedFloor, billboard])
 
   const displayWidth = CANVAS_W * fitScale
   const displayHeight = CANVAS_H * fitScale
@@ -595,7 +602,54 @@ export function GameCanvas({
         const isAbyss = level === FLOOR_MIN
 
         const { tile, variant } = platformTileForLevel(level, sprites)
-        drawPlatformStrip(ctx, tile, px, y, pw, variant)
+        
+        if (isCenter) {
+          const billboardY = y - BILLBOARD_STRIP_H + PLATFORM_DRAW_H
+          ctx.imageSmoothingEnabled = false
+          ctx.save()
+          ctx.beginPath()
+          ctx.rect(px, billboardY - PLATFORM_DRAW_H + 2, pw, BILLBOARD_PLATFORM_H)
+          ctx.clip()
+          for (let tx = 0; tx < pw; tx += PLATFORM_TILE_SIZE) {
+            const drawW = Math.min(PLATFORM_TILE_SIZE, pw - tx)
+            ctx.drawImage(
+              tile,
+              PLATFORM_STRIP_SOURCES[variant].sx,
+              PLATFORM_STRIP_SOURCES[variant].sy,
+              PLATFORM_STRIP_SOURCES[variant].sw,
+              PLATFORM_STRIP_SOURCES[variant].sh,
+              px + tx,
+              billboardY - PLATFORM_DRAW_H + 2,
+              drawW,
+              BILLBOARD_PLATFORM_H,
+            )
+          }
+          ctx.restore()
+          
+          const bb = billboardRef.current
+          if (bb && bb.url) {
+            ctx.font = 'bold 9px sans-serif'
+            ctx.textAlign = 'center'
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+            const labelText = bb.label.length > 30 ? bb.label.slice(0, 27) + '...' : bb.label
+            const metrics = ctx.measureText(labelText)
+            const boxW = metrics.width + 12
+            const boxH = 13
+            const boxX = CENTER_X - boxW / 2
+            const boxY = billboardY - 8
+            ctx.fillRect(boxX, boxY, boxW, boxH)
+            ctx.fillStyle = '#fde68a'
+            ctx.fillText(labelText, CENTER_X, boxY + 10)
+            ctx.font = '7px sans-serif'
+            ctx.fillStyle = '#a3a3a3'
+            ctx.fillText('↗ External link', CENTER_X, boxY + boxH + 8)
+          }
+          
+          ctx.fillStyle = '#fbbf24'
+          ctx.fillRect(px, billboardY + 5, pw, 2)
+        } else {
+          drawPlatformStrip(ctx, tile, px, y, pw, variant)
+        }
 
         if (level <= -44) {
           ctx.imageSmoothingEnabled = false
@@ -615,8 +669,10 @@ export function GameCanvas({
         else if (isAbyss) borderColor = '#f87171'
         else if (isCenter) borderColor = '#fbbf24'
 
-        ctx.fillStyle = borderColor
-        ctx.fillRect(px, y + 3, pw, 1)
+        if (!isCenter) {
+          ctx.fillStyle = borderColor
+          ctx.fillRect(px, y + 3, pw, 1)
+        }
 
         if (shouldShowFloorLabel(level)) {
           ctx.font = '10px monospace'
@@ -728,6 +784,20 @@ export function GameCanvas({
     const rect = canvas.getBoundingClientRect()
     const x = ((e.clientX - rect.left) / rect.width) * CANVAS_W
     const y = ((e.clientY - rect.top) / rect.height) * CANVAS_H
+
+    const bb = billboardRef.current
+    if (bb && bb.url && bb.url.startsWith('https://')) {
+      const floor0Y = yForLevel(0, PADDING_TOP, FLOOR_GAP)
+      const floor0Pw = floorWidth(0, MAX_PLATFORM_W, MIN_PLATFORM_W)
+      const floor0Px = CENTER_X - floor0Pw / 2
+      const billboardTop = floor0Y - BILLBOARD_STRIP_H
+      const billboardBottom = floor0Y + 8
+      
+      if (x >= floor0Px && x <= floor0Px + floor0Pw && y >= billboardTop && y <= billboardBottom) {
+        window.open(bb.url, '_blank', 'noopener,noreferrer')
+        return
+      }
+    }
 
     let closest: { id: string; dist: number; floor: number } | null = null
     for (const entity of entitiesRef.current.values()) {

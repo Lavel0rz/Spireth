@@ -1,6 +1,6 @@
 'use client'
 
-import { useTotalMinted } from '@/hooks/useSpireth'
+import { useTotalMinted, useBillboard } from '@/hooks/useSpireth'
 import { useSpirethEvents } from '@/hooks/useSpirethEvents'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { GameCanvas, type GameCanvasDisplayMetrics } from '@/components/GameCanvas'
@@ -16,6 +16,13 @@ import { useIsDevPlaytest, useSimulateCompetition } from '@/hooks/useSimulateCom
 import { SimStats } from '@/components/SimStats'
 import { SimSummaryModal } from '@/components/SimSummaryModal'
 
+export interface BillboardData {
+  url: string
+  label: string
+  bid: bigint
+  bidder: string
+}
+
 export function Board({
   selectedImpId,
   onSelectImp,
@@ -25,8 +32,16 @@ export function Board({
 }) {
   useSpirethEvents()
   const { data: totalMinted } = useTotalMinted()
+  const { data: billboardData } = useBillboard()
   const [realImps, setRealImps] = useState<ImpData[]>([])
   const [canvasMetrics, setCanvasMetrics] = useState<GameCanvasDisplayMetrics | null>(null)
+  
+  const billboard: BillboardData | null = useMemo(() => {
+    if (!billboardData) return null
+    const [url, label, bid, bidder] = billboardData as [string, string, bigint, string]
+    if (!url || url.length === 0) return null
+    return { url, label, bid, bidder }
+  }, [billboardData])
   const isDevPlaytest = useIsDevPlaytest()
   const {
     active: simActive,
@@ -156,6 +171,7 @@ export function Board({
             selectedImpId={selectedImpId}
             onSelectImp={onSelectImp}
             onDisplayMetrics={handleDisplayMetrics}
+            billboard={billboard}
           />
           {simSummary && (
             <SimSummaryModal

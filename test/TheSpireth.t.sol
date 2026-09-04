@@ -684,7 +684,323 @@ contract TheSpirethTest is Test {
         vm.warp(block.timestamp + 45 days);
         spireth.forceFreeze();
     }
+    
+    function test_BillboardBidSucceedsLive() public {
+        _setupLiveSeason();
+        
+        uint256 poolBefore = spireth.prizePool();
+        uint256 devBefore = dev.balance;
+        
+        vm.prank(alice);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com", "My Ad");
+        
+        (string memory url, string memory label, uint256 bid, address bidder) = spireth.getBillboard();
+        assertEq(url, "https://example.com");
+        assertEq(label, "My Ad");
+        assertEq(bid, 0.001 ether);
+        assertEq(bidder, alice);
+        
+        uint256 expectedDevShare = 0.001 ether * 10 / 100;
+        uint256 expectedPoolShare = 0.001 ether - expectedDevShare;
+        assertEq(dev.balance - devBefore, expectedDevShare);
+        assertEq(spireth.prizePool() - poolBefore, expectedPoolShare);
+    }
+    
+    function test_BillboardBid90_10Split() public {
+        _setupLiveSeason();
+        
+        uint256 bidAmount = 0.1 ether;
+        uint256 poolBefore = spireth.prizePool();
+        uint256 devBefore = dev.balance;
+        
+        vm.prank(alice);
+        spireth.bidBillboard{value: bidAmount}("https://example.com", "Test");
+        
+        uint256 expectedDevShare = bidAmount * 10 / 100;
+        uint256 expectedPoolShare = bidAmount - expectedDevShare;
+        assertEq(dev.balance - devBefore, expectedDevShare);
+        assertEq(spireth.prizePool() - poolBefore, expectedPoolShare);
+    }
+    
+    function test_BillboardBidTooLowReverts() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.BidTooLow.selector);
+        spireth.bidBillboard{value: 0.0009 ether}("https://example.com", "Test");
+    }
+    
+    function test_BillboardSecondBidMustBeHigher() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com", "First");
+        
+        vm.prank(bob);
+        vm.expectRevert(TheSpireth.BidTooLow.selector);
+        spireth.bidBillboard{value: 0.001 ether}("https://other.com", "Second");
+        
+        vm.prank(bob);
+        spireth.bidBillboard{value: 0.002 ether}("https://other.com", "Second");
+        
+        (string memory url, string memory label, uint256 bid, address bidder) = spireth.getBillboard();
+        assertEq(url, "https://other.com");
+        assertEq(label, "Second");
+        assertEq(bid, 0.002 ether);
+        assertEq(bidder, bob);
+    }
+    
+    function test_BillboardHttpRevertsInvalidUrl() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidUrl.selector);
+        spireth.bidBillboard{value: 0.001 ether}("http://example.com", "Test");
+    }
+    
+    function test_BillboardJavascriptRevertsInvalidUrl() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidUrl.selector);
+        spireth.bidBillboard{value: 0.001 ether}("javascript:alert(1)", "Test");
+    }
+    
+    function test_BillboardDataUrlRevertsInvalidUrl() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidUrl.selector);
+        spireth.bidBillboard{value: 0.001 ether}("data:text/html,test", "Test");
+    }
+    
+    function test_BillboardOversizedUrlReverts() public {
+        _setupLiveSeason();
+        
+        bytes memory longUrl = new bytes(201);
+        longUrl[0] = 0x68; // h
+        longUrl[1] = 0x74; // t
+        longUrl[2] = 0x74; // t
+        longUrl[3] = 0x70; // p
+        longUrl[4] = 0x73; // s
+        longUrl[5] = 0x3a; // :
+        longUrl[6] = 0x2f; // /
+        longUrl[7] = 0x2f; // /
+        for (uint i = 8; i < 201; i++) {
+            longUrl[i] = 0x61; // a
+        }
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidUrl.selector);
+        spireth.bidBillboard{value: 0.001 ether}(string(longUrl), "Test");
+    }
+    
+    function test_BillboardOversizedLabelReverts() public {
+        _setupLiveSeason();
+        
+        bytes memory longLabel = new bytes(65);
+        for (uint i = 0; i < 65; i++) {
+            longLabel[i] = 0x61;
+        }
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidLabel.selector);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com", string(longLabel));
+    }
+    
+    function test_BillboardUrlWithAngleBracketsReverts() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidUrl.selector);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com/<script>", "Test");
+    }
+    
+    function test_BillboardLabelWithAngleBracketsReverts() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidLabel.selector);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com", "<script>alert(1)</script>");
+    }
+    
+    function test_BillboardUrlWithBacktickReverts() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidUrl.selector);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com/`test", "Test");
+    }
+    
+    function test_BillboardUrlWithQuotesReverts() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidUrl.selector);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com/\"test", "Test");
+    }
+    
+    function test_BillboardUrlWithSingleQuoteReverts() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidUrl.selector);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com/'test", "Test");
+    }
+    
+    function test_BillboardUrlWithBackslashReverts() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidUrl.selector);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com/\\test", "Test");
+    }
+    
+    function test_BillboardUrlWithSpaceReverts() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidUrl.selector);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com/ test", "Test");
+    }
+    
+    function test_BillboardUrlWithAtSignBeforeSlashReverts() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidUrl.selector);
+        spireth.bidBillboard{value: 0.001 ether}("https://user@evil.com", "Test");
+    }
+    
+    function test_BillboardUrlWithAtSignAfterSlashAllowed() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com/contact@email.com", "Test");
+        
+        (string memory url,,,) = spireth.getBillboard();
+        assertEq(url, "https://example.com/contact@email.com");
+    }
+    
+    function test_BillboardNotLiveReverts() public {
+        vm.prank(alice);
+        spireth.mint();
+        vm.prank(bob);
+        spireth.mint();
+        
+        vm.prank(alice);
+        vm.expectRevert();
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com", "Test");
+    }
+    
+    function test_BillboardFrozenReverts() public {
+        _setupLiveSeason();
+        vm.warp(block.timestamp + 45 days);
+        spireth.forceFreeze();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.NotLive.selector);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com", "Test");
+    }
+    
+    function test_ClearBillboardOnlyOwner() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com", "Test");
+        
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(OwnableUnauthorizedAccount.selector, alice));
+        spireth.clearBillboard();
+        
+        vm.prank(owner);
+        spireth.clearBillboard();
+        
+        (string memory url, string memory label, uint256 bid, address bidder) = spireth.getBillboard();
+        assertEq(url, "");
+        assertEq(label, "");
+        assertEq(bid, 0.001 ether);
+        assertEq(bidder, alice);
+    }
+    
+    function test_BillboardNextBidAfterClear() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com", "Test");
+        
+        vm.prank(owner);
+        spireth.clearBillboard();
+        
+        assertEq(spireth.nextBillboardBid(), 0.002 ether);
+    }
+    
+    function test_NextBillboardBidInitial() public {
+        assertEq(spireth.nextBillboardBid(), 0.001 ether);
+    }
+    
+    function test_NextBillboardBidAfterBid() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        spireth.bidBillboard{value: 0.005 ether}("https://example.com", "Test");
+        
+        assertEq(spireth.nextBillboardBid(), 0.006 ether);
+    }
+    
+    function test_BillboardEmptyUrlReverts() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidUrl.selector);
+        spireth.bidBillboard{value: 0.001 ether}("", "Test");
+    }
+    
+    function test_BillboardEmptyLabelReverts() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidLabel.selector);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com", "");
+    }
+    
+    function test_BillboardDevFeesSoftFail() public {
+        RevertingReceiver revertingDev = new RevertingReceiver();
+        TheSpireth spirethWithRevertingDev = new TheSpireth(owner, address(revertingDev), ROLL_COST, MINT_CAP);
+        
+        vm.deal(alice, 100 ether);
+        vm.deal(bob, 100 ether);
+        
+        vm.prank(alice);
+        spirethWithRevertingDev.mint();
+        vm.prank(bob);
+        spirethWithRevertingDev.mint();
+        vm.prank(owner);
+        spirethWithRevertingDev.soundHorn();
+        
+        uint256 bidAmount = 0.01 ether;
+        uint256 expectedDevFee = bidAmount * 10 / 100;
+        
+        vm.prank(alice);
+        spirethWithRevertingDev.bidBillboard{value: bidAmount}("https://example.com", "Test");
+        
+        assertEq(spirethWithRevertingDev.pendingDevFees(), expectedDevFee);
+        assertEq(spirethWithRevertingDev.prizePool(), bidAmount - expectedDevFee);
+    }
+    
+    function test_BillboardLabelAllowsSpaces() public {
+        _setupLiveSeason();
+        
+        vm.prank(alice);
+        spireth.bidBillboard{value: 0.001 ether}("https://example.com", "My Cool Ad With Spaces");
+        
+        (, string memory label,,) = spireth.getBillboard();
+        assertEq(label, "My Cool Ad With Spaces");
+    }
 }
+
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+error OwnableUnauthorizedAccount(address account);
 
 contract MockERC721 {
     mapping(uint256 => address) private _owners;
