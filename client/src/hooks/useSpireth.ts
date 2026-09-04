@@ -1,11 +1,38 @@
 'use client'
 
-import { useReadContract, useReadContracts, useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId } from 'wagmi'
+import { useCallback, useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  useReadContract,
+  useReadContracts,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+  useChainId,
+} from 'wagmi'
 import { parseEther, keccak256, encodePacked, type Abi } from 'viem'
 import TheSpirethABI from '@/abi/TheSpireth.json'
+import { getContractAddress } from '@/config/contract'
 
 const SPIRETH_ABI = TheSpirethABI as Abi
-import { getContractAddress } from '@/config/contract'
+
+/** Invalidate on-chain read queries after a successful write. */
+export function useInvalidateSpirethReads() {
+  const queryClient = useQueryClient()
+
+  return useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['readContract'] })
+  }, [queryClient])
+}
+
+function useInvalidateOnReceiptSuccess(isSuccess: boolean, reset?: () => void) {
+  const invalidateReads = useInvalidateSpirethReads()
+
+  useEffect(() => {
+    if (!isSuccess) return
+    invalidateReads()
+    reset?.()
+  }, [isSuccess, invalidateReads, reset])
+}
 
 export function useContractAddress() {
   const chainId = useChainId()
@@ -58,14 +85,18 @@ export function useOwnedImpId(userAddress?: `0x${string}`) {
 
   const { data, refetch } = useReadContracts({
     contracts,
-    query: { enabled: !!userAddress && !!address && total > 0, refetchInterval: 5000 },
+    query: {
+      enabled: !!userAddress && !!address && total > 0,
+      refetchInterval: 5000,
+      refetchOnMount: true,
+    },
   })
 
   const ownedIndex = data?.findIndex(
     (result) =>
       result.status === 'success' &&
       typeof result.result === 'string' &&
-      result.result.toLowerCase() === userAddress?.toLowerCase()
+      result.result.toLowerCase() === userAddress?.toLowerCase(),
   )
 
   return {
@@ -100,7 +131,11 @@ export function useHasMinted(userAddress?: `0x${string}`) {
     abi: SPIRETH_ABI,
     functionName: 'hasMinted',
     args: userAddress ? [userAddress] : undefined,
-    query: { enabled: !!userAddress },
+    query: {
+      enabled: !!userAddress,
+      refetchInterval: 5000,
+      refetchOnMount: true,
+    },
   })
 }
 
@@ -218,8 +253,10 @@ export function useHasBellRinger() {
 
 export function useMint() {
   const address = useContractAddress()
-  const { writeContract, data: hash, isPending, error } = useWriteContract()
+  const { writeContract, data: hash, isPending, error, reset } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash })
+
+  useInvalidateOnReceiptSuccess(isSuccess, reset)
 
   const mint = () => {
     if (!address) return

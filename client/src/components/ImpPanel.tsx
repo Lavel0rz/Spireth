@@ -61,7 +61,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   const { data: pendingRoll } = usePendingRoll(impId ?? ZERO)
   const { data: impPrize } = useImpPrize(impId ?? ZERO)
   
-  const { mint, isPending: isMinting, isConfirming: isMintConfirming } = useMint()
+  const { mint, isPending: isMinting, isConfirming: isMintConfirming, isSuccess: isMintSuccess } = useMint()
   const { commitRoll, isPending: isCommitting, isConfirming: isCommitConfirming } = useCommitRoll(impId ?? ZERO)
   const { revealRoll, isPending: isRevealing, isConfirming: isRevealConfirming } = useRevealRoll(impId ?? ZERO)
   const { claim, isPending: isClaiming, isConfirming: isClaimConfirming } = useClaim(impId ?? ZERO)
@@ -80,14 +80,17 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   const [showPfpForm, setShowPfpForm] = useState(false)
   const [pfpContract, setPfpContract] = useState('')
   const [pfpTokenId, setPfpTokenId] = useState('')
+  const [joinedOptimistic, setJoinedOptimistic] = useState(false)
 
   const isSignup = seasonState !== undefined && BigInt(seasonState as bigint) === ZERO
   const isLive = seasonState !== undefined && BigInt(seasonState as bigint) === BigInt(1)
   const isFrozen = seasonState !== undefined && BigInt(seasonState as bigint) === BigInt(2)
   const mintedCount = totalMinted !== undefined ? Number(totalMinted) : 0
   const cap = mintCap !== undefined ? Number(mintCap) : 0
+  const isJoining = isMinting || isMintConfirming || (joinedOptimistic && hasMinted !== true)
   const canJoin =
-    !hasMinted &&
+    hasMinted === false &&
+    !isJoining &&
     (isSignup || isLive) &&
     mintCap !== undefined &&
     totalMinted !== undefined &&
@@ -154,11 +157,39 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
     return () => window.clearTimeout(timer)
   }, [impId])
 
+  useEffect(() => {
+    if (isMintSuccess) setJoinedOptimistic(true)
+  }, [isMintSuccess])
+
+  useEffect(() => {
+    if (hasMinted === true) setJoinedOptimistic(false)
+  }, [hasMinted])
+
   if (!address) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
         <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Character</h2>
         <p className="text-zinc-400">Connect your wallet to play.</p>
+      </div>
+    )
+  }
+
+  if (isJoining) {
+    return (
+      <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Spireth</h2>
+        <p className="text-zinc-400">
+          {isMintConfirming || joinedOptimistic ? 'Joined! Loading your character…' : 'Confirm in wallet…'}
+        </p>
+      </div>
+    )
+  }
+
+  if (hasMinted === undefined && (isSignup || isLive)) {
+    return (
+      <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Spireth</h2>
+        <p className="text-zinc-400">Checking signup status…</p>
       </div>
     )
   }
@@ -183,7 +214,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
     )
   }
 
-  if (!hasMinted && isFrozen) {
+  if (hasMinted === false && isFrozen) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
         <h2 className="text-lg font-semibold text-zinc-200 mb-4">Season Ended</h2>
@@ -194,7 +225,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
     )
   }
 
-  if (!hasMinted && mintCap !== undefined && totalMinted !== undefined && mintedCount >= cap) {
+  if (hasMinted === false && mintCap !== undefined && totalMinted !== undefined && mintedCount >= cap) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
         <h2 className="text-lg font-semibold text-zinc-200 mb-4">Mint Cap Reached</h2>
@@ -209,7 +240,9 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
         <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Character</h2>
-        <p className="text-zinc-400">Select your character on the board.</p>
+        <p className="text-zinc-400">
+          {hasMinted === true ? 'Loading your character…' : 'Select your character on the board.'}
+        </p>
       </div>
     )
   }

@@ -15,7 +15,7 @@ export default function Home() {
   const [selectedImpId, setSelectedImpId] = useState<bigint | null>(null)
 
   useEffect(() => {
-    if (hasMinted && ownedImpId !== null) {
+    if (hasMinted === true && ownedImpId !== null) {
       setSelectedImpId(ownedImpId)
     }
   }, [hasMinted, ownedImpId])
