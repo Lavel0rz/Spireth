@@ -605,10 +605,13 @@ export function GameCanvas({
         
         if (isCenter) {
           const billboardY = y - BILLBOARD_STRIP_H + PLATFORM_DRAW_H
+          const stripTopY = billboardY - PLATFORM_DRAW_H + 2
+          const stripHeight = BILLBOARD_PLATFORM_H
+          
           ctx.imageSmoothingEnabled = false
           ctx.save()
           ctx.beginPath()
-          ctx.rect(px, billboardY - PLATFORM_DRAW_H + 2, pw, BILLBOARD_PLATFORM_H)
+          ctx.rect(px, stripTopY, pw, stripHeight)
           ctx.clip()
           for (let tx = 0; tx < pw; tx += PLATFORM_TILE_SIZE) {
             const drawW = Math.min(PLATFORM_TILE_SIZE, pw - tx)
@@ -619,15 +622,41 @@ export function GameCanvas({
               PLATFORM_STRIP_SOURCES[variant].sw,
               PLATFORM_STRIP_SOURCES[variant].sh,
               px + tx,
-              billboardY - PLATFORM_DRAW_H + 2,
+              stripTopY,
               drawW,
-              BILLBOARD_PLATFORM_H,
+              stripHeight,
             )
           }
           ctx.restore()
           
+          const bb = billboardRef.current
+          if (bb && bb.url) {
+            ctx.save()
+            ctx.beginPath()
+            ctx.rect(px, stripTopY, pw, stripHeight)
+            ctx.clip()
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.45)'
+            ctx.fillRect(px, stripTopY, pw, stripHeight)
+            
+            ctx.font = 'bold 10px sans-serif'
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            ctx.fillStyle = '#fde68a'
+            
+            let labelText = bb.label
+            const maxTextWidth = pw - 20
+            while (ctx.measureText(labelText).width > maxTextWidth && labelText.length > 3) {
+              labelText = labelText.slice(0, -4) + '...'
+            }
+            
+            const centerY = stripTopY + stripHeight / 2
+            ctx.fillText(labelText, CENTER_X, centerY)
+            ctx.restore()
+          }
+          
           ctx.fillStyle = '#fbbf24'
-          ctx.fillRect(px, billboardY + 5, pw, 2)
+          ctx.fillRect(px, stripTopY + stripHeight - 1, pw, 2)
         } else {
           drawPlatformStrip(ctx, tile, px, y, pw, variant)
         }
@@ -734,35 +763,6 @@ export function GameCanvas({
         }
       }
 
-      const bb = billboardRef.current
-      if (bb && bb.url) {
-        const floor0Y = yForLevel(0, PADDING_TOP, FLOOR_GAP)
-        const floor0Pw = floorWidth(0, MAX_PLATFORM_W, MIN_PLATFORM_W)
-        const billboardLabelY = floor0Y - BILLBOARD_STRIP_H - 8
-        
-        ctx.font = 'bold 11px sans-serif'
-        ctx.textAlign = 'center'
-        const labelText = bb.label.length > 25 ? bb.label.slice(0, 22) + '...' : bb.label
-        const metrics = ctx.measureText(labelText)
-        const boxW = metrics.width + 16
-        const boxH = 18
-        const boxX = CENTER_X - boxW / 2
-        const boxY = billboardLabelY - boxH / 2
-        
-        ctx.fillStyle = 'rgba(120, 53, 15, 0.92)'
-        ctx.fillRect(boxX, boxY, boxW, boxH)
-        ctx.strokeStyle = '#fbbf24'
-        ctx.lineWidth = 2
-        ctx.strokeRect(boxX, boxY, boxW, boxH)
-        
-        ctx.fillStyle = '#fef3c7'
-        ctx.fillText(labelText, CENTER_X, boxY + 13)
-        
-        ctx.font = '8px sans-serif'
-        ctx.fillStyle = '#fcd34d'
-        ctx.fillText('↗ click for link', CENTER_X, boxY + boxH + 10)
-      }
-
       rafRef.current = requestAnimationFrame(tick)
     }
 
@@ -800,10 +800,11 @@ export function GameCanvas({
       const floor0Y = yForLevel(0, PADDING_TOP, FLOOR_GAP)
       const floor0Pw = floorWidth(0, MAX_PLATFORM_W, MIN_PLATFORM_W)
       const floor0Px = CENTER_X - floor0Pw / 2
-      const billboardTop = floor0Y - BILLBOARD_STRIP_H
-      const billboardBottom = floor0Y + 8
+      const billboardY = floor0Y - BILLBOARD_STRIP_H + PLATFORM_DRAW_H
+      const stripTopY = billboardY - PLATFORM_DRAW_H + 2
+      const stripHeight = BILLBOARD_PLATFORM_H
       
-      if (x >= floor0Px && x <= floor0Px + floor0Pw && y >= billboardTop && y <= billboardBottom) {
+      if (x >= floor0Px && x <= floor0Px + floor0Pw && y >= stripTopY && y <= stripTopY + stripHeight) {
         window.open(bb.url, '_blank', 'noopener,noreferrer')
         return
       }
