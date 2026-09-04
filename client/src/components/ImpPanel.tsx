@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useAccount, useChainId, useBlockNumber, useWalletClient } from 'wagmi'
+import { useAccount, useChainId, useBlockNumber } from 'wagmi'
 import { formatEther } from 'viem'
 import {
   useImp,
@@ -23,6 +23,7 @@ import {
   useEquippedPfp,
   useEquipPfp,
   useClearPfp,
+  useInvalidateSpirethReads,
 } from '@/hooks/useSpireth'
 import { useGameAnimation } from '@/context/GameAnimationContext'
 
@@ -57,7 +58,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   
   const chainId = useChainId()
   const { data: blockNumber } = useBlockNumber({ watch: true })
-  const { data: walletClient } = useWalletClient()
+  const invalidateReads = useInvalidateSpirethReads()
   
   const { data: impData } = useImp(impId ?? ZERO)
   const { data: canRoll } = useCanRoll(impId ?? ZERO)
@@ -88,6 +89,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   const [pfpTokenId, setPfpTokenId] = useState('')
   const [joinedOptimistic, setJoinedOptimistic] = useState(false)
   const [isMiningBlocks, setIsMiningBlocks] = useState(false)
+  const [mineError, setMineError] = useState<string | null>(null)
 
   const isSignup = seasonState !== undefined && BigInt(seasonState as bigint) === ZERO
   const isLive = seasonState !== undefined && BigInt(seasonState as bigint) === BigInt(1)
@@ -152,19 +154,30 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   }
 
   const handleMineBlocks = useCallback(async () => {
-    if (!walletClient || chainId !== 31337) return
+    if (chainId !== 31337) return
     setIsMiningBlocks(true)
+    setMineError(null)
     try {
-      await walletClient.request({
-        method: 'anvil_mine' as any,
-        params: ['0x4'] as any,
+      const res = await fetch('http://127.0.0.1:8545', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'anvil_mine', params: ['0x4'] }),
       })
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`)
+      }
+      const data = await res.json()
+      if (data.error) {
+        throw new Error(data.error.message || 'RPC error')
+      }
+      invalidateReads()
     } catch (e) {
       console.error('Failed to mine blocks:', e)
+      setMineError('Could not reach Anvil at 127.0.0.1:8545')
     } finally {
       setIsMiningBlocks(false)
     }
-  }, [walletClient, chainId])
+  }, [chainId, invalidateReads])
 
   useEffect(() => {
     if (impId === null) return
@@ -333,13 +346,18 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
                 {isRevealing ? 'Confirming...' : isRevealConfirming ? 'Revealing...' : expired ? 'Expired' : pendingSecret === null ? 'Secret Missing' : !canReveal ? 'Waiting ~3 blocks…' : 'Reveal Roll'}
               </button>
               {chainId === 31337 && pending && !canReveal && pendingSecret !== null && (
-                <button
-                  onClick={handleMineBlocks}
-                  disabled={isMiningBlocks}
-                  className="w-full px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-sm font-medium rounded-lg transition disabled:opacity-50"
-                >
-                  {isMiningBlocks ? 'Mining...' : 'Mine blocks (local)'}
-                </button>
+                <>
+                  <button
+                    onClick={handleMineBlocks}
+                    disabled={isMiningBlocks}
+                    className="w-full px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-sm font-medium rounded-lg transition disabled:opacity-50"
+                  >
+                    {isMiningBlocks ? 'Mining...' : 'Mine blocks (local)'}
+                  </button>
+                  {mineError && (
+                    <p className="text-xs text-red-400">{mineError}</p>
+                  )}
+                </>
               )}
               {expired && (
                 <p className="text-xs text-red-400">
