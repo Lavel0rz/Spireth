@@ -8,26 +8,32 @@ import {
   BOARD_CANVAS_W,
   BOARD_FLOOR_GAP,
   BOARD_PADDING_TOP,
-  DIRECTION_ROW,
   DISPLAY_SIZE,
   FLOOR_MAX,
   FLOOR_MIN,
+  FRAME_FOOT_Y,
+  FRAME_H,
+  FRAME_W,
   PLATFORM_DRAW_H,
   PLATFORM_MAX_W,
   PLATFORM_MIN_W,
   PLATFORM_STRIP_SOURCES,
   PLATFORM_TILE_SIZE,
-  SPRITE_SIZE,
   floorHalfWidth,
   floorWidth,
   laneBounds,
+  pepeCommitFrame,
+  pepeDeadFrame,
+  pepeJumpFrame,
+  pepeRevealFrame,
+  pepeWalkFrame,
   shortAddress,
   jumpDurationMs,
   shouldShowFloorLabel,
   tintFromAddress,
   yForLevel,
-  type Direction,
   type ImpData,
+  type PepeFrame,
 } from '@/lib/gameUtils'
 
 const CANVAS_W = BOARD_CANVAS_W
@@ -35,7 +41,7 @@ const PADDING_TOP = BOARD_PADDING_TOP
 const FLOOR_GAP = BOARD_FLOOR_GAP
 const MAX_PLATFORM_W = PLATFORM_MAX_W
 const MIN_PLATFORM_W = PLATFORM_MIN_W
-const FOOT_RATIO = 42 / SPRITE_SIZE
+const FOOT_RATIO = FRAME_FOOT_Y / FRAME_H
 const CANVAS_H = BOARD_CANVAS_H
 const CENTER_X = CANVAS_W / 2
 const HIT_RADIUS_RATIO = 0.65
@@ -53,7 +59,7 @@ interface CharacterEntity {
   displayHeight: number
   floorX: number
   direction: 1 | -1
-  facing: Direction
+  facing: 'down' | 'up' | 'left' | 'right'
   animState: AnimState
   frame: number
   frameTimer: number
@@ -79,8 +85,7 @@ function drawTintedFrame(
   offscreen: HTMLCanvasElement,
   outlineCanvas: HTMLCanvasElement,
   image: HTMLImageElement,
-  sx: number,
-  sy: number,
+  frame: PepeFrame,
   dx: number,
   dy: number,
   size: number,
@@ -91,10 +96,22 @@ function drawTintedFrame(
   const outlineCtx = outlineCanvas.getContext('2d')
   if (!offCtx || !outlineCtx) return
 
-  offCtx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
-  offCtx.drawImage(image, sx, sy, SPRITE_SIZE, SPRITE_SIZE, 0, 0, SPRITE_SIZE, SPRITE_SIZE)
+  const { col, row, flipX } = frame
+  const sx = col * FRAME_W
+  const sy = row * FRAME_H
 
-  const imgData = offCtx.getImageData(0, 0, SPRITE_SIZE, SPRITE_SIZE)
+  offCtx.clearRect(0, 0, FRAME_W, FRAME_H)
+  if (flipX) {
+    offCtx.save()
+    offCtx.translate(FRAME_W, 0)
+    offCtx.scale(-1, 1)
+    offCtx.drawImage(image, sx, sy, FRAME_W, FRAME_H, 0, 0, FRAME_W, FRAME_H)
+    offCtx.restore()
+  } else {
+    offCtx.drawImage(image, sx, sy, FRAME_W, FRAME_H, 0, 0, FRAME_W, FRAME_H)
+  }
+
+  const imgData = offCtx.getImageData(0, 0, FRAME_W, FRAME_H)
   for (let i = 0; i < imgData.data.length; i += 4) {
     const a = imgData.data[i + 3]
     if (a === 0) continue
@@ -114,11 +131,11 @@ function drawTintedFrame(
   }
   offCtx.putImageData(imgData, 0, 0)
 
-  outlineCtx.clearRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
+  outlineCtx.clearRect(0, 0, FRAME_W, FRAME_H)
   outlineCtx.drawImage(offscreen, 0, 0)
   outlineCtx.globalCompositeOperation = 'source-in'
   outlineCtx.fillStyle = 'rgba(0, 0, 0, 0.88)'
-  outlineCtx.fillRect(0, 0, SPRITE_SIZE, SPRITE_SIZE)
+  outlineCtx.fillRect(0, 0, FRAME_W, FRAME_H)
   outlineCtx.globalCompositeOperation = 'source-over'
 
   ctx.imageSmoothingEnabled = false
@@ -128,9 +145,9 @@ function drawTintedFrame(
     [0, -1],
     [0, 1],
   ] as const) {
-    ctx.drawImage(outlineCanvas, 0, 0, SPRITE_SIZE, SPRITE_SIZE, dx + ox, dy + oy, size, size)
+    ctx.drawImage(outlineCanvas, 0, 0, FRAME_W, FRAME_H, dx + ox, dy + oy, size, size)
   }
-  ctx.drawImage(offscreen, 0, 0, SPRITE_SIZE, SPRITE_SIZE, dx, dy, size, size)
+  ctx.drawImage(offscreen, 0, 0, FRAME_W, FRAME_H, dx, dy, size, size)
 }
 
 function drawPlatformStrip(
@@ -424,14 +441,14 @@ export function GameCanvas({
 
     if (!offscreenRef.current) {
       const c = document.createElement('canvas')
-      c.width = SPRITE_SIZE
-      c.height = SPRITE_SIZE
+      c.width = FRAME_W
+      c.height = FRAME_H
       offscreenRef.current = c
     }
     if (!outlineRef.current) {
       const c = document.createElement('canvas')
-      c.width = SPRITE_SIZE
-      c.height = SPRITE_SIZE
+      c.width = FRAME_W
+      c.height = FRAME_H
       outlineRef.current = c
     }
 
@@ -503,6 +520,10 @@ export function GameCanvas({
           const eased = easeInOutCubic(t)
           entity.displayHeight = entity.jumpFrom + (entity.jumpTo - entity.jumpFrom) * eased
           entity.yOffset = -Math.sin(t * Math.PI) * JUMP_ARC_HEIGHT
+          if (entity.frameTimer > 100) {
+            entity.frameTimer = 0
+            entity.frame = (entity.frame + 1) % 2
+          }
           if (entity.jumpProgress >= 1) {
             entity.displayHeight = entity.jumpTo
             entity.height = entity.jumpTo
@@ -581,60 +602,31 @@ export function GameCanvas({
         const charX = px + entity.floorX * pw - spriteSize / 2
         const charY = charYOnFloor(floorY, entity.yOffset)
 
-        const useActions =
-          entity.animState === 'commit' ||
-          entity.animState === 'revealPending' ||
-          entity.animState === 'jump'
-
-        if (useActions) {
-          let actionRow = 0
-          let actionCol = 0
-          if (entity.animState === 'commit') {
-            actionRow = 0
-            actionCol = entity.animTimer < 250 ? 0 : 1
-          } else if (entity.animState === 'revealPending') {
-            actionRow = 0
-            actionCol = Math.floor(entity.animTimer / 120) % 2
-          } else if (entity.facing === 'up') {
-            actionRow = 0
-            actionCol = 1
-          } else if (entity.facing === 'down') {
-            actionRow = 2
-            actionCol = 1
-          } else {
-            actionRow = entity.facing === 'right' ? 2 : 3
-            actionCol = entity.frame % 2
-          }
-          drawTintedFrame(
-            ctx,
-            offscreenRef.current!,
-            outlineRef.current!,
-            sprites.actions,
-            actionCol * SPRITE_SIZE,
-            actionRow * SPRITE_SIZE,
-            charX,
-            charY,
-            spriteSize,
-            entity.tint,
-            entity.isDead,
-          )
+        let pepeFrame: PepeFrame
+        if (entity.isDead) {
+          pepeFrame = pepeDeadFrame()
+        } else if (entity.animState === 'commit') {
+          pepeFrame = pepeCommitFrame(entity.animTimer)
+        } else if (entity.animState === 'revealPending') {
+          pepeFrame = pepeRevealFrame(entity.animTimer)
+        } else if (entity.animState === 'jump') {
+          pepeFrame = pepeJumpFrame(entity.facing, entity.frame)
         } else {
-          const row = DIRECTION_ROW[entity.facing]
-          const col = entity.frame % 4
-          drawTintedFrame(
-            ctx,
-            offscreenRef.current!,
-            outlineRef.current!,
-            sprites.walk,
-            col * SPRITE_SIZE,
-            row * SPRITE_SIZE,
-            charX,
-            charY,
-            spriteSize,
-            entity.tint,
-            entity.isDead,
-          )
+          pepeFrame = pepeWalkFrame(entity.facing, entity.frame)
         }
+
+        drawTintedFrame(
+          ctx,
+          offscreenRef.current!,
+          outlineRef.current!,
+          sprites.pepe,
+          pepeFrame,
+          charX,
+          charY,
+          spriteSize,
+          entity.tint,
+          entity.isDead,
+        )
 
         if (entity.isSelected) {
           ctx.imageSmoothingEnabled = false
