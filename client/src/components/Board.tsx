@@ -74,16 +74,19 @@ export function Board({
   const meterHeight = canvasMetrics?.displayHeight ?? undefined
 
   return (
-    <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-      <h2 className="text-lg font-semibold text-zinc-200 mb-4 flex items-center gap-2">
-        <span className="text-2xl">⬥</span>
-        The Spireth
+    <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-4">
+      <div className="mb-3 flex items-baseline gap-3 flex-wrap">
+        <h2 className="text-lg font-semibold text-zinc-200 flex items-center gap-2">
+          <span className="text-xl">⬥</span>
+          The Spireth
+        </h2>
+        <p className="text-sm text-zinc-500">Climb the Ethereum Rhombus</p>
         {imps.length > 0 && (
-          <span className="text-xs font-normal text-zinc-500 ml-auto">
+          <span className="text-xs text-zinc-500 ml-auto">
             {livingCount} living · {deadCount} fallen
           </span>
         )}
-      </h2>
+      </div>
 
       <div className="flex gap-1">
         <div
