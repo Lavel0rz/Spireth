@@ -214,6 +214,17 @@ export function usePendingRoll(impId: bigint) {
   })
 }
 
+export function useCanReveal(impId: bigint) {
+  const address = useContractAddress()
+  return useReadContract({
+    address,
+    abi: SPIRETH_ABI,
+    functionName: 'canReveal',
+    args: [impId],
+    query: { refetchInterval: 2000 },
+  })
+}
+
 export function useImpPrize(impId: bigint) {
   const address = useContractAddress()
   return useReadContract({

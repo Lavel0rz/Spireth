@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useAccount } from 'wagmi'
+import { useState, useEffect, useCallback } from 'react'
+import { useAccount, useChainId, useBlockNumber, useWalletClient } from 'wagmi'
 import { formatEther } from 'viem'
 import {
   useImp,
   useCanRoll,
+  useCanReveal,
   useTimeUntilDeath,
   useTimeUntilNextRoll,
   usePendingRoll,
@@ -54,8 +55,13 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   const { data: totalMinted } = useTotalMinted()
   const { data: rollCost } = useRollCost()
   
+  const chainId = useChainId()
+  const { data: blockNumber } = useBlockNumber({ watch: true })
+  const { data: walletClient } = useWalletClient()
+  
   const { data: impData } = useImp(impId ?? ZERO)
   const { data: canRoll } = useCanRoll(impId ?? ZERO)
+  const { data: canReveal } = useCanReveal(impId ?? ZERO)
   const { data: timeUntilDeath } = useTimeUntilDeath(impId ?? ZERO)
   const { data: timeUntilNextRoll } = useTimeUntilNextRoll(impId ?? ZERO)
   const { data: pendingRoll } = usePendingRoll(impId ?? ZERO)
@@ -63,7 +69,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   
   const { mint, isPending: isMinting, isConfirming: isMintConfirming, isSuccess: isMintSuccess } = useMint()
   const { commitRoll, isPending: isCommitting, isConfirming: isCommitConfirming } = useCommitRoll(impId ?? ZERO)
-  const { revealRoll, isPending: isRevealing, isConfirming: isRevealConfirming } = useRevealRoll(impId ?? ZERO)
+  const { revealRoll, isPending: isRevealing, isConfirming: isRevealConfirming, isSuccess: isRevealSuccess } = useRevealRoll(impId ?? ZERO)
   const { claim, isPending: isClaiming, isConfirming: isClaimConfirming } = useClaim(impId ?? ZERO)
   const { data: equippedPfp } = useEquippedPfp(impId ?? ZERO)
   const { equipPfp, isPending: isEquipping, isConfirming: isEquipConfirming } = useEquipPfp(impId ?? ZERO)
@@ -81,6 +87,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   const [pfpContract, setPfpContract] = useState('')
   const [pfpTokenId, setPfpTokenId] = useState('')
   const [joinedOptimistic, setJoinedOptimistic] = useState(false)
+  const [isMiningBlocks, setIsMiningBlocks] = useState(false)
 
   const isSignup = seasonState !== undefined && BigInt(seasonState as bigint) === ZERO
   const isLive = seasonState !== undefined && BigInt(seasonState as bigint) === BigInt(1)
@@ -141,12 +148,23 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
     if (secret) {
       if (impId !== null) triggerRevealPending(impId)
       revealRoll(secret)
-      if (impId !== null) {
-        localStorage.removeItem(`spireth_secret_${impId}`)
-      }
-      setPendingSecret(null)
     }
   }
+
+  const handleMineBlocks = useCallback(async () => {
+    if (!walletClient || chainId !== 31337) return
+    setIsMiningBlocks(true)
+    try {
+      await walletClient.request({
+        method: 'anvil_mine' as any,
+        params: ['0x4'] as any,
+      })
+    } catch (e) {
+      console.error('Failed to mine blocks:', e)
+    } finally {
+      setIsMiningBlocks(false)
+    }
+  }, [walletClient, chainId])
 
   useEffect(() => {
     if (impId === null) return
@@ -156,6 +174,13 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
     }, 0)
     return () => window.clearTimeout(timer)
   }, [impId])
+
+  useEffect(() => {
+    if (isRevealSuccess && impId !== null) {
+      localStorage.removeItem(`spireth_secret_${impId}`)
+      setPendingSecret(null)
+    }
+  }, [isRevealSuccess, impId])
 
   useEffect(() => {
     if (isMintSuccess) setJoinedOptimistic(true)
@@ -289,15 +314,33 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
           {pending ? (
             <div className="space-y-3">
               <div className="text-sm text-amber-400">
-                Roll pending - reveal unlocks after ~3 blocks!
+                {pendingSecret === null
+                  ? 'Roll pending on-chain'
+                  : canReveal
+                    ? 'Ready to reveal'
+                    : 'Reveal unlocks after 3 blocks (REVEAL_DELAY). On local Anvil, mine blocks if the button stays locked.'}
               </div>
+              {pendingSecret === null && (
+                <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                  Secret missing in this browser — cannot reveal. Wait for forfeit window or re-roll after forfeit.
+                </p>
+              )}
               <button
                 onClick={handleReveal}
-                disabled={isRevealing || isRevealConfirming || expired}
+                disabled={isRevealing || isRevealConfirming || expired || !canReveal || pendingSecret === null}
                 className="w-full px-4 py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white font-semibold rounded-lg transition disabled:opacity-50"
               >
-                {isRevealing ? 'Confirming...' : isRevealConfirming ? 'Revealing...' : expired ? 'Expired' : 'Reveal Roll'}
+                {isRevealing ? 'Confirming...' : isRevealConfirming ? 'Revealing...' : expired ? 'Expired' : pendingSecret === null ? 'Secret Missing' : !canReveal ? 'Waiting ~3 blocks…' : 'Reveal Roll'}
               </button>
+              {chainId === 31337 && pending && !canReveal && pendingSecret !== null && (
+                <button
+                  onClick={handleMineBlocks}
+                  disabled={isMiningBlocks}
+                  className="w-full px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 text-sm font-medium rounded-lg transition disabled:opacity-50"
+                >
+                  {isMiningBlocks ? 'Mining...' : 'Mine blocks (local)'}
+                </button>
+              )}
               {expired && (
                 <p className="text-xs text-red-400">
                   The reveal window has expired. Your roll was forfeited.
