@@ -125,13 +125,12 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     }
     
     function mint() external {
-        if (seasonState != SeasonState.Signup) revert NotInSignup();
+        if (seasonState == SeasonState.Frozen) revert NotInSignup();
         if (hasMinted[msg.sender]) revert AlreadyMinted();
         if (totalMinted >= mintCap) revert MintCapReached();
         
-        if (block.timestamp > deployTime + SIGNUP_DURATION) {
+        if (seasonState == SeasonState.Signup && block.timestamp > deployTime + SIGNUP_DURATION) {
             _soundHorn();
-            revert NotInSignup();
         }
         
         uint256 impId = totalMinted;

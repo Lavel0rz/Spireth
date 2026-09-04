@@ -12,6 +12,8 @@ import {
   useRollCost,
   useSeasonState,
   useHasMinted,
+  useMintCap,
+  useTotalMinted,
   useMint,
   useCommitRoll,
   useRevealRoll,
@@ -48,6 +50,8 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   const { address } = useAccount()
   const { data: seasonState } = useSeasonState()
   const { data: hasMinted } = useHasMinted(address)
+  const { data: mintCap } = useMintCap()
+  const { data: totalMinted } = useTotalMinted()
   const { data: rollCost } = useRollCost()
   
   const { data: impData } = useImp(impId ?? ZERO)
@@ -78,12 +82,19 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   const [pfpTokenId, setPfpTokenId] = useState('')
   const [joinedOptimistic, setJoinedOptimistic] = useState(false)
 
-  const isJoining = isMinting || isMintConfirming || (joinedOptimistic && hasMinted !== true)
-  const canJoin = hasMinted === false && !isJoining
-
   const isSignup = seasonState !== undefined && BigInt(seasonState as bigint) === ZERO
   const isLive = seasonState !== undefined && BigInt(seasonState as bigint) === BigInt(1)
   const isFrozen = seasonState !== undefined && BigInt(seasonState as bigint) === BigInt(2)
+  const mintedCount = totalMinted !== undefined ? Number(totalMinted) : 0
+  const cap = mintCap !== undefined ? Number(mintCap) : 0
+  const isJoining = isMinting || isMintConfirming || (joinedOptimistic && hasMinted !== true)
+  const canJoin =
+    hasMinted === false &&
+    !isJoining &&
+    (isSignup || isLive) &&
+    mintCap !== undefined &&
+    totalMinted !== undefined &&
+    mintedCount < cap
   
   const impDataArray = impData as [number, bigint, bigint, boolean, boolean, string] | undefined
   const height = impDataArray ? impDataArray[0] : 0
@@ -163,52 +174,63 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
     )
   }
 
-  if (isSignup) {
-    if (canJoin) {
-      return (
-        <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Spireth</h2>
-          <p className="text-zinc-400 mb-4">
-            One character per wallet. Join free during signup and appear on the tower.
-          </p>
-          <button
-            onClick={() => mint()}
-            disabled={isMinting || isMintConfirming}
-            className="w-full px-4 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold rounded-lg transition disabled:opacity-50"
-          >
-            {isMinting ? 'Confirm in wallet…' : isMintConfirming ? 'Joining…' : 'Join'}
-          </button>
-        </div>
-      )
-    }
-
-    if (isJoining) {
-      return (
-        <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Spireth</h2>
-          <p className="text-zinc-400">
-            {isMintConfirming || joinedOptimistic ? 'Joined! Loading your character…' : 'Confirm in wallet…'}
-          </p>
-        </div>
-      )
-    }
-
-    if (hasMinted === undefined) {
-      return (
-        <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Spireth</h2>
-          <p className="text-zinc-400">Checking signup status…</p>
-        </div>
-      )
-    }
-  }
-
-  if (hasMinted !== true && !isSignup) {
+  if (isJoining) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Signup Closed</h2>
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Spireth</h2>
         <p className="text-zinc-400">
-          The signup window has ended. Watch the race unfold!
+          {isMintConfirming || joinedOptimistic ? 'Joined! Loading your character…' : 'Confirm in wallet…'}
+        </p>
+      </div>
+    )
+  }
+
+  if (hasMinted === undefined && (isSignup || isLive)) {
+    return (
+      <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Spireth</h2>
+        <p className="text-zinc-400">Checking signup status…</p>
+      </div>
+    )
+  }
+
+  if (canJoin) {
+    return (
+      <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Spireth</h2>
+        <p className="text-zinc-400 mb-4">
+          {isLive
+            ? 'The horn has sounded, but late joiners are welcome. One character per wallet — join and appear on the tower.'
+            : 'One character per wallet. Join free during signup and appear on the tower.'}
+        </p>
+        <button
+          onClick={() => mint()}
+          disabled={isMinting || isMintConfirming}
+          className="w-full px-4 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold rounded-lg transition disabled:opacity-50"
+        >
+          {isMinting ? 'Confirm in wallet…' : isMintConfirming ? 'Joining…' : 'Join'}
+        </button>
+      </div>
+    )
+  }
+
+  if (hasMinted === false && isFrozen) {
+    return (
+      <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Season Ended</h2>
+        <p className="text-zinc-400">
+          This season is frozen. New players cannot join until the next run.
+        </p>
+      </div>
+    )
+  }
+
+  if (hasMinted === false && mintCap !== undefined && totalMinted !== undefined && mintedCount >= cap) {
+    return (
+      <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Mint Cap Reached</h2>
+        <p className="text-zinc-400">
+          All Imp slots for this season have been claimed. Watch the race unfold!
         </p>
       </div>
     )

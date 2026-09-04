@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useReadContract,
@@ -12,6 +12,8 @@ import {
 import { parseEther, keccak256, encodePacked, type Abi } from 'viem'
 import TheSpirethABI from '@/abi/TheSpireth.json'
 import { getContractAddress } from '@/config/contract'
+
+const SPIRETH_ABI = TheSpirethABI as Abi
 
 /** Invalidate on-chain read queries after a successful write. */
 export function useInvalidateSpirethReads() {
@@ -41,7 +43,7 @@ export function useSeasonState() {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'seasonState',
     query: { refetchInterval: 5000 },
   })
@@ -51,17 +53,63 @@ export function useTotalMinted() {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'totalMinted',
     query: { refetchInterval: 5000 },
   })
+}
+
+export function useMintCap() {
+  const address = useContractAddress()
+  return useReadContract({
+    address,
+    abi: SPIRETH_ABI,
+    functionName: 'mintCap',
+  })
+}
+
+export function useOwnedImpId(userAddress?: `0x${string}`) {
+  const address = useContractAddress()
+  const { data: totalMinted } = useTotalMinted()
+  const total = totalMinted !== undefined ? Number(totalMinted) : 0
+
+  const contracts =
+    userAddress && address && total > 0
+      ? Array.from({ length: total }, (_, i) => ({
+          address,
+          abi: SPIRETH_ABI,
+          functionName: 'ownerOf' as const,
+          args: [BigInt(i)] as const,
+        }))
+      : []
+
+  const { data, refetch } = useReadContracts({
+    contracts,
+    query: {
+      enabled: !!userAddress && !!address && total > 0,
+      refetchInterval: 5000,
+      refetchOnMount: true,
+    },
+  })
+
+  const ownedIndex = data?.findIndex(
+    (result) =>
+      result.status === 'success' &&
+      typeof result.result === 'string' &&
+      result.result.toLowerCase() === userAddress?.toLowerCase(),
+  )
+
+  return {
+    impId: ownedIndex !== undefined && ownedIndex >= 0 ? BigInt(ownedIndex) : null,
+    refetch,
+  }
 }
 
 export function usePrizePool() {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'prizePool',
     query: { refetchInterval: 5000 },
   })
@@ -71,7 +119,7 @@ export function useRollCost() {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'rollCost',
   })
 }
@@ -80,7 +128,7 @@ export function useHasMinted(userAddress?: `0x${string}`) {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'hasMinted',
     args: userAddress ? [userAddress] : undefined,
     query: {
@@ -91,52 +139,11 @@ export function useHasMinted(userAddress?: `0x${string}`) {
   })
 }
 
-export function useOwnedImpId(userAddress?: `0x${string}`) {
-  const contractAddress = useContractAddress()
-  const { data: totalMinted } = useTotalMinted()
-  const total = totalMinted !== undefined ? Number(totalMinted) : 0
-
-  const contracts = useMemo(
-    () =>
-      Array.from({ length: total }, (_, i) => ({
-        address: contractAddress,
-        abi: TheSpirethABI as Abi,
-        functionName: 'ownerOf' as const,
-        args: [BigInt(i)] as const,
-      })),
-    [contractAddress, total],
-  )
-
-  const { data: ownerResults } = useReadContracts({
-    contracts,
-    query: {
-      enabled: !!userAddress && !!contractAddress && total > 0,
-      refetchInterval: 5000,
-      refetchOnMount: true,
-    },
-  })
-
-  const ownedImpId = useMemo((): bigint | null | undefined => {
-    if (!userAddress) return undefined
-    if (total === 0) return null
-    if (!ownerResults) return undefined
-    const idx = ownerResults.findIndex(
-      (result) =>
-        result.status === 'success' &&
-        typeof result.result === 'string' &&
-        result.result.toLowerCase() === userAddress.toLowerCase(),
-    )
-    return idx >= 0 ? BigInt(idx) : null
-  }, [ownerResults, userAddress, total])
-
-  return { data: ownedImpId }
-}
-
 export function useSignupTimeRemaining() {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'signupTimeRemaining',
     query: { refetchInterval: 1000 },
   })
@@ -146,7 +153,7 @@ export function useSeasonTimeRemaining() {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'seasonTimeRemaining',
     query: { refetchInterval: 1000 },
   })
@@ -156,7 +163,7 @@ export function useImp(impId: bigint) {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'getImp',
     args: [impId],
     query: { refetchInterval: 5000 },
@@ -167,7 +174,7 @@ export function useCanRoll(impId: bigint) {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'canRoll',
     args: [impId],
     query: { refetchInterval: 5000 },
@@ -178,7 +185,7 @@ export function useTimeUntilDeath(impId: bigint) {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'timeUntilDeath',
     args: [impId],
     query: { refetchInterval: 1000 },
@@ -189,7 +196,7 @@ export function useTimeUntilNextRoll(impId: bigint) {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'timeUntilNextRoll',
     args: [impId],
     query: { refetchInterval: 1000 },
@@ -200,7 +207,7 @@ export function usePendingRoll(impId: bigint) {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'getPendingRoll',
     args: [impId],
     query: { refetchInterval: 3000 },
@@ -211,7 +218,7 @@ export function useImpPrize(impId: bigint) {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'impPrize',
     args: [impId],
   })
@@ -221,7 +228,7 @@ export function useLivingImpsAtFreeze() {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'getLivingImpsAtFreeze',
   })
 }
@@ -230,7 +237,7 @@ export function useBellRingerId() {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'bellRingerId',
   })
 }
@@ -239,7 +246,7 @@ export function useHasBellRinger() {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'hasBellRinger',
   })
 }
@@ -255,7 +262,7 @@ export function useMint() {
     if (!address) return
     writeContract({
       address,
-      abi: TheSpirethABI,
+      abi: SPIRETH_ABI,
       functionName: 'mint',
     })
   }
@@ -274,7 +281,7 @@ export function useCommitRoll(impId: bigint) {
     const commitment = keccak256(encodePacked(['uint256', 'uint256'], [secret, impId]))
     writeContract({
       address,
-      abi: TheSpirethABI,
+      abi: SPIRETH_ABI,
       functionName: 'commitRoll',
       args: [impId, commitment],
       value: rollCost as bigint,
@@ -293,7 +300,7 @@ export function useRevealRoll(impId: bigint) {
     if (!address) return
     writeContract({
       address,
-      abi: TheSpirethABI,
+      abi: SPIRETH_ABI,
       functionName: 'revealRoll',
       args: [impId, secret],
     })
@@ -311,7 +318,7 @@ export function useClaim(impId: bigint) {
     if (!address) return
     writeContract({
       address,
-      abi: TheSpirethABI,
+      abi: SPIRETH_ABI,
       functionName: 'claim',
       args: [impId],
     })
@@ -324,7 +331,7 @@ export function useEquippedPfp(impId: bigint) {
   const address = useContractAddress()
   return useReadContract({
     address,
-    abi: TheSpirethABI,
+    abi: SPIRETH_ABI,
     functionName: 'getEquippedPfp',
     args: [impId],
     query: { refetchInterval: 5000 },
@@ -340,7 +347,7 @@ export function useEquipPfp(impId: bigint) {
     if (!address) return
     writeContract({
       address,
-      abi: TheSpirethABI,
+      abi: SPIRETH_ABI,
       functionName: 'equipPfp',
       args: [impId, nftAddress, tokenId],
     })
@@ -358,7 +365,7 @@ export function useClearPfp(impId: bigint) {
     if (!address) return
     writeContract({
       address,
-      abi: TheSpirethABI,
+      abi: SPIRETH_ABI,
       functionName: 'clearPfp',
       args: [impId],
     })

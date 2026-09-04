@@ -6,18 +6,19 @@ import { WalletConnect } from '@/components/WalletConnect'
 import { SeasonInfo } from '@/components/SeasonInfo'
 import { Board } from '@/components/Board'
 import { ImpPanel } from '@/components/ImpPanel'
-import { useOwnedImpId } from '@/hooks/useSpireth'
+import { useHasMinted, useOwnedImpId } from '@/hooks/useSpireth'
 
 export default function Home() {
   const { address } = useAccount()
-  const { data: ownedImpId } = useOwnedImpId(address)
+  const { data: hasMinted } = useHasMinted(address)
+  const { impId: ownedImpId } = useOwnedImpId(address)
   const [selectedImpId, setSelectedImpId] = useState<bigint | null>(null)
 
   useEffect(() => {
-    if (ownedImpId !== undefined && ownedImpId !== null) {
+    if (hasMinted === true && ownedImpId !== null) {
       setSelectedImpId(ownedImpId)
     }
-  }, [ownedImpId])
+  }, [hasMinted, ownedImpId])
 
   return (
     <div className="min-h-screen">
@@ -92,7 +93,7 @@ export default function Home() {
               <ul className="space-y-2 text-sm text-zinc-500">
                 <li className="flex gap-2">
                   <span className="text-emerald-400">◈</span>
-                  <span>Free join during 72h signup</span>
+                  <span>Free join during signup or live season</span>
                 </li>
                 <li className="flex gap-2">
                   <span className="text-amber-400">◈</span>
