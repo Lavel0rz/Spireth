@@ -5,6 +5,7 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 /**
  * @title The Spireth - Season 1
@@ -25,6 +26,12 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
  * - Player cannot change their secret after committing
  * - Block producers cannot know the player's secret when producing the block
  * - REVEAL_DELAY of 3 blocks reduces single-block validator bias
+ *
+ * Prize Distribution (Offchain Merkle):
+ * - On freeze: bell ringer gets 20% allocated on-chain (claimBell)
+ * - Rank prizes: owner publishes merkle root; players claim via claimRank with proof
+ * - Leaf encoding: keccak256(abi.encodePacked(impId, amount))
+ * - See docs/MERKLE_PRIZES.md for offchain tree generation
  */
 contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     int8 public constant SUMMIT = 50;
@@ -44,7 +51,7 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         uint64 lastActivity;
         uint64 heightReachedAt;
         bool isDead;
-        bool hasClaimed;
+        bool hasClaimedRank;
     }
     
     struct PendingRoll {
@@ -76,9 +83,14 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     mapping(address => bool) public hasMinted;
     mapping(uint256 => EquippedPfp) public equippedPfps;
     
-    uint256[] public livingImpsAtFreeze;
     uint256 public bellRingerPrize;
-    mapping(uint256 => uint256) public impPrize;
+    bool public bellClaimed;
+    
+    bytes32 public merkleRoot;
+    uint256 public rankPrizePool;
+    uint256 public rankClaimedTotal;
+    
+    uint256 public pendingDevFees;
     
     event ImpMinted(address indexed owner, uint256 indexed impId);
     event HornSounded(uint256 timestamp);
@@ -87,9 +99,14 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     event RollForfeited(uint256 indexed impId);
     event ImpDied(uint256 indexed impId, int8 finalHeight);
     event SeasonFrozen(uint256 indexed bellRingerId, int8 finalHeight);
-    event PrizeClaimed(uint256 indexed impId, address indexed owner, uint256 amount);
+    event PrizeRootPublished(bytes32 indexed root);
+    event BellClaimed(uint256 indexed impId, address indexed owner, uint256 amount);
+    event RankClaimed(uint256 indexed impId, address indexed owner, uint256 amount);
     event PfpEquipped(uint256 indexed impId, address indexed nft, uint256 tokenId);
     event PfpCleared(uint256 indexed impId);
+    event DevFeeAccrued(uint256 amount);
+    event DevFeesWithdrawn(address indexed to, uint256 amount);
+    event DustSwept(address indexed to, uint256 amount);
     
     error NotInSignup();
     error NotLive();
@@ -113,6 +130,13 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     error SeasonExpired();
     error NotNftOwner();
     error NoPfpEquipped();
+    error SeasonAlreadyLive();
+    error NotDev();
+    error NoPendingFees();
+    error RootNotSet();
+    error RootAlreadySet();
+    error InvalidProof();
+    error NotBellRinger();
     
     constructor(
         address _owner,
@@ -128,11 +152,11 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     }
     
     function mint() external {
-        if (seasonState == SeasonState.Frozen) revert NotInSignup();
+        if (seasonState != SeasonState.Signup) revert NotInSignup();
         if (hasMinted[msg.sender]) revert AlreadyMinted();
         if (totalMinted >= mintCap) revert MintCapReached();
         
-        if (seasonState == SeasonState.Signup && block.timestamp > deployTime + SIGNUP_DURATION) {
+        if (block.timestamp > deployTime + SIGNUP_DURATION) {
             _soundHorn();
         }
         
@@ -146,7 +170,7 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
             lastActivity: uint64(block.timestamp),
             heightReachedAt: uint64(block.timestamp),
             isDead: false,
-            hasClaimed: false
+            hasClaimedRank: false
         });
         
         _safeMint(msg.sender, impId);
@@ -190,7 +214,12 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         prizePool += poolShare;
         
         (bool success, ) = dev.call{value: devShare}("");
-        if (!success) revert TransferFailed();
+        if (!success) {
+            pendingDevFees += devShare;
+            emit DevFeeAccrued(devShare);
+        }
+        
+        imp.lastActivity = uint64(block.timestamp);
         
         pendingRolls[impId] = PendingRoll({
             commitment: commitment,
@@ -204,6 +233,9 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     function revealRoll(uint256 impId, uint256 secret) external nonReentrant {
         _checkLiveAndNotExpired();
         if (ownerOf(impId) != msg.sender) revert NotImpOwner();
+        
+        _updateDeathStatus(impId);
+        if (imps[impId].isDead) revert ImpIsDead();
         
         PendingRoll storage pending = pendingRolls[impId];
         if (!pending.pending) revert NoPendingRoll();
@@ -294,94 +326,59 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         bellRingerId = _bellRingerId;
         hasBellRinger = _hasBellRinger;
         
-        delete livingImpsAtFreeze;
-        for (uint256 i = 0; i < totalMinted; i++) {
-            _updateDeathStatus(i);
-            if (!imps[i].isDead) {
-                livingImpsAtFreeze.push(i);
-            }
+        if (_hasBellRinger) {
+            bellRingerPrize = prizePool * 20 / 100;
         }
         
-        _sortLivingImps();
-        _calculatePrizes(_bellRingerId, _hasBellRinger);
+        rankPrizePool = prizePool - bellRingerPrize;
         
         emit SeasonFrozen(_bellRingerId, _hasBellRinger ? imps[_bellRingerId].height : int8(0));
     }
     
-    function _sortLivingImps() internal {
-        uint256 len = livingImpsAtFreeze.length;
-        if (len <= 1) return;
+    function publishPrizeRoot(bytes32 root) external onlyOwner {
+        if (seasonState != SeasonState.Frozen) revert NotFrozen();
+        if (merkleRoot != bytes32(0)) revert RootAlreadySet();
         
-        for (uint256 i = 1; i < len; i++) {
-            uint256 key = livingImpsAtFreeze[i];
-            int256 j = int256(i) - 1;
-            
-            while (j >= 0 && _compareImps(livingImpsAtFreeze[uint256(j)], key) < 0) {
-                livingImpsAtFreeze[uint256(j + 1)] = livingImpsAtFreeze[uint256(j)];
-                j--;
-            }
-            livingImpsAtFreeze[uint256(j + 1)] = key;
-        }
+        merkleRoot = root;
+        emit PrizeRootPublished(root);
     }
     
-    function _compareImps(uint256 a, uint256 b) internal view returns (int256) {
-        Imp storage impA = imps[a];
-        Imp storage impB = imps[b];
+    function claimBell() external nonReentrant {
+        if (seasonState != SeasonState.Frozen) revert NotFrozen();
+        if (!hasBellRinger) revert NotBellRinger();
+        if (bellClaimed) revert AlreadyClaimed();
+        if (ownerOf(bellRingerId) != msg.sender) revert NotImpOwner();
         
-        uint8 absA = impA.height >= 0 ? uint8(int8(impA.height)) : uint8(-impA.height);
-        uint8 absB = impB.height >= 0 ? uint8(int8(impB.height)) : uint8(-impB.height);
+        bellClaimed = true;
         
-        if (absA > absB) return 1;
-        if (absA < absB) return -1;
+        (bool success, ) = msg.sender.call{value: bellRingerPrize}("");
+        if (!success) revert TransferFailed();
         
-        if (impA.heightReachedAt < impB.heightReachedAt) return 1;
-        if (impA.heightReachedAt > impB.heightReachedAt) return -1;
-        return 0;
+        emit BellClaimed(bellRingerId, msg.sender, bellRingerPrize);
     }
     
-    function _calculatePrizes(uint256 _bellRingerId, bool _hasBellRinger) internal {
-        uint256 pool = prizePool;
-        if (pool == 0 || livingImpsAtFreeze.length == 0) return;
+    function claimRank(uint256 impId, uint256 amount, bytes32[] calldata proof) external nonReentrant {
+        if (seasonState != SeasonState.Frozen) revert NotFrozen();
+        if (merkleRoot == bytes32(0)) revert RootNotSet();
+        if (ownerOf(impId) != msg.sender) revert NotImpOwner();
         
-        uint256 paidCount = livingImpsAtFreeze.length / 2;
-        if (paidCount == 0 && livingImpsAtFreeze.length > 0) paidCount = 1;
+        Imp storage imp = imps[impId];
+        if (imp.hasClaimedRank) revert AlreadyClaimed();
         
-        if (_hasBellRinger) {
-            bellRingerPrize = pool * 20 / 100;
-            impPrize[_bellRingerId] = bellRingerPrize;
-        }
+        bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(impId, amount))));
+        if (!MerkleProof.verify(proof, merkleRoot, leaf)) revert InvalidProof();
         
-        uint256 remainingPool = pool - bellRingerPrize;
-        uint256 totalWeight = paidCount * (paidCount + 1) / 2;
+        imp.hasClaimedRank = true;
+        rankClaimedTotal += amount;
         
-        for (uint256 rank = 0; rank < paidCount; rank++) {
-            uint256 impId = livingImpsAtFreeze[rank];
-            uint256 weight = paidCount - rank;
-            uint256 share = (remainingPool * weight) / totalWeight;
-            impPrize[impId] += share;
-        }
+        (bool success, ) = msg.sender.call{value: amount}("");
+        if (!success) revert TransferFailed();
+        
+        emit RankClaimed(impId, msg.sender, amount);
     }
     
     function _absHeight(int8 h) internal pure returns (uint8) {
         return h >= 0 ? uint8(int8(h)) : uint8(-h);
-    }
-    
-    function claim(uint256 impId) external nonReentrant {
-        if (seasonState != SeasonState.Frozen) revert NotFrozen();
-        if (ownerOf(impId) != msg.sender) revert NotImpOwner();
-        
-        Imp storage imp = imps[impId];
-        if (imp.hasClaimed) revert AlreadyClaimed();
-        
-        uint256 prize = impPrize[impId];
-        if (prize == 0) revert NoPrize();
-        
-        imp.hasClaimed = true;
-        
-        (bool success, ) = msg.sender.call{value: prize}("");
-        if (!success) revert TransferFailed();
-        
-        emit PrizeClaimed(impId, msg.sender, prize);
     }
     
     function equipPfp(uint256 impId, address nft, uint256 tokenId) external {
@@ -405,7 +402,7 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         uint64 lastRoll,
         uint64 heightReachedAt,
         bool isDead,
-        bool hasClaimed,
+        bool hasClaimedRank,
         address owner
     ) {
         Imp storage imp = imps[impId];
@@ -414,7 +411,7 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
             imp.lastRoll,
             imp.heightReachedAt,
             imp.isDead || (block.timestamp > imp.lastActivity + DEATH_THRESHOLD),
-            imp.hasClaimed,
+            imp.hasClaimedRank,
             _ownerOf(impId)
         );
     }
@@ -489,20 +486,47 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         return endTime - block.timestamp;
     }
     
-    function getLivingImpsAtFreeze() external view returns (uint256[] memory) {
-        return livingImpsAtFreeze;
-    }
-    
-    function getLivingCount() external view returns (uint256) {
-        return livingImpsAtFreeze.length;
-    }
-    
     function setRollCost(uint256 _rollCost) external onlyOwner {
+        if (seasonState != SeasonState.Signup) revert SeasonAlreadyLive();
         rollCost = _rollCost;
     }
     
     function setMintCap(uint256 _mintCap) external onlyOwner {
+        if (seasonState != SeasonState.Signup) revert SeasonAlreadyLive();
         require(_mintCap >= totalMinted, "Cap below minted");
         mintCap = _mintCap;
+    }
+    
+    function withdrawDevFees() external nonReentrant {
+        if (msg.sender != dev) revert NotDev();
+        uint256 amount = pendingDevFees;
+        if (amount == 0) revert NoPendingFees();
+        
+        pendingDevFees = 0;
+        
+        (bool success, ) = dev.call{value: amount}("");
+        if (!success) revert TransferFailed();
+        
+        emit DevFeesWithdrawn(dev, amount);
+    }
+    
+    function sweepDust(address to) external nonReentrant onlyOwner {
+        if (seasonState != SeasonState.Frozen) revert NotFrozen();
+        if (merkleRoot == bytes32(0)) revert RootNotSet();
+        
+        uint256 unclaimedBell = bellClaimed ? 0 : bellRingerPrize;
+        uint256 unclaimedRank = rankPrizePool - rankClaimedTotal;
+        uint256 outstanding = unclaimedBell + unclaimedRank + pendingDevFees;
+        
+        uint256 sweepable = address(this).balance > outstanding 
+            ? address(this).balance - outstanding 
+            : 0;
+        
+        if (sweepable == 0) revert NoPrize();
+        
+        (bool success, ) = to.call{value: sweepable}("");
+        if (!success) revert TransferFailed();
+        
+        emit DustSwept(to, sweepable);
     }
 }

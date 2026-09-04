@@ -53,7 +53,7 @@
   },
   {
     "type": "function",
-    "name": "REVEAL_WINDOW",
+    "name": "REVEAL_DELAY",
     "inputs": [],
     "outputs": [
       {
@@ -66,7 +66,7 @@
   },
   {
     "type": "function",
-    "name": "REVEAL_DELAY",
+    "name": "REVEAL_WINDOW",
     "inputs": [],
     "outputs": [
       {
@@ -168,6 +168,19 @@
   },
   {
     "type": "function",
+    "name": "bellClaimed",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "bellRingerId",
     "inputs": [],
     "outputs": [
@@ -194,25 +207,6 @@
   },
   {
     "type": "function",
-    "name": "canRoll",
-    "inputs": [
-      {
-        "name": "impId",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bool",
-        "internalType": "bool"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "canReveal",
     "inputs": [
       {
@@ -232,12 +226,48 @@
   },
   {
     "type": "function",
-    "name": "claim",
+    "name": "canRoll",
     "inputs": [
       {
         "name": "impId",
         "type": "uint256",
         "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "claimBell",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "claimRank",
+    "inputs": [
+      {
+        "name": "impId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "proof",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
       }
     ],
     "outputs": [],
@@ -442,7 +472,7 @@
         "internalType": "bool"
       },
       {
-        "name": "hasClaimed",
+        "name": "hasClaimedRank",
         "type": "bool",
         "internalType": "bool"
       },
@@ -450,32 +480,6 @@
         "name": "owner",
         "type": "address",
         "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getLivingCount",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "getLivingImpsAtFreeze",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256[]",
-        "internalType": "uint256[]"
       }
     ],
     "stateMutability": "view"
@@ -561,25 +565,6 @@
   },
   {
     "type": "function",
-    "name": "impPrize",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "imps",
     "inputs": [
       {
@@ -615,7 +600,7 @@
         "internalType": "bool"
       },
       {
-        "name": "hasClaimed",
+        "name": "hasClaimedRank",
         "type": "bool",
         "internalType": "bool"
       }
@@ -648,19 +633,13 @@
   },
   {
     "type": "function",
-    "name": "livingImpsAtFreeze",
-    "inputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
+    "name": "merkleRoot",
+    "inputs": [],
     "outputs": [
       {
         "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
+        "type": "bytes32",
+        "internalType": "bytes32"
       }
     ],
     "stateMutability": "view"
@@ -732,6 +711,19 @@
   },
   {
     "type": "function",
+    "name": "pendingDevFees",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "pendingRolls",
     "inputs": [
       {
@@ -762,6 +754,45 @@
   {
     "type": "function",
     "name": "prizePool",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "publishPrizeRoot",
+    "inputs": [
+      {
+        "name": "root",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "rankClaimedTotal",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "rankPrizePool",
     "inputs": [],
     "outputs": [
       {
@@ -972,6 +1003,19 @@
   },
   {
     "type": "function",
+    "name": "sweepDust",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "symbol",
     "inputs": [],
     "outputs": [
@@ -1090,6 +1134,13 @@
     "stateMutability": "nonpayable"
   },
   {
+    "type": "function",
+    "name": "withdrawDevFees",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
     "type": "event",
     "name": "Approval",
     "inputs": [
@@ -1135,6 +1186,82 @@
         "type": "bool",
         "indexed": false,
         "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BellClaimed",
+    "inputs": [
+      {
+        "name": "impId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "owner",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DevFeeAccrued",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DevFeesWithdrawn",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DustSwept",
+    "inputs": [
+      {
+        "name": "to",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1249,7 +1376,20 @@
   },
   {
     "type": "event",
-    "name": "PrizeClaimed",
+    "name": "PrizeRootPublished",
+    "inputs": [
+      {
+        "name": "root",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "RankClaimed",
     "inputs": [
       {
         "name": "impId",
@@ -1513,12 +1653,22 @@
   },
   {
     "type": "error",
+    "name": "InvalidProof",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "MinimumMintersNotMet",
     "inputs": []
   },
   {
     "type": "error",
     "name": "MintCapReached",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NoPendingFees",
     "inputs": []
   },
   {
@@ -1534,6 +1684,16 @@
   {
     "type": "error",
     "name": "NoPrize",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotBellRinger",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotDev",
     "inputs": []
   },
   {
@@ -1601,6 +1761,21 @@
   {
     "type": "error",
     "name": "RollOnCooldown",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RootAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "RootNotSet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SeasonAlreadyLive",
     "inputs": []
   },
   {

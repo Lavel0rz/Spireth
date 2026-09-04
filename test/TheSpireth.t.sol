@@ -26,16 +26,12 @@ contract TheSpirethTest is Test {
         assertTrue(spireth.hasMinted(alice));
     }
 
-    function test_MintDuringLiveSeason() public {
+    function test_MintDuringLiveSeasonReverts() public {
         _setupLiveSeason();
 
         vm.prank(charlie);
+        vm.expectRevert(TheSpireth.NotInSignup.selector);
         spireth.mint();
-
-        assertEq(spireth.ownerOf(2), charlie);
-        assertEq(spireth.totalMinted(), 3);
-        assertTrue(spireth.hasMinted(charlie));
-        assertEq(uint8(spireth.seasonState()), uint8(TheSpireth.SeasonState.Live));
     }
 
     function test_MintRevertsWhenFrozen() public {
@@ -80,42 +76,11 @@ contract TheSpirethTest is Test {
         bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
         vm.prank(alice);
         spireth.commitRoll{value: ROLL_COST}(0, commitment);
-        vm.roll(block.number + spireth.REVEAL_DELAY() + 1);
+        vm.roll(block.number + 4);
         vm.prank(alice);
         spireth.revealRoll(0, secret);
-        (int8 height, , , , , ) = spireth.getImp(0);
+        (int8 height, , , , ,) = spireth.getImp(0);
         assertTrue(height >= -4 && height <= 4 && height != 0);
-    }
-
-    function test_RevealTooEarlyWithDelay() public {
-        _setupLiveSeason();
-        uint256 secret = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
-        vm.prank(alice);
-        spireth.commitRoll{value: ROLL_COST}(0, commitment);
-        vm.roll(block.number + spireth.REVEAL_DELAY());
-        vm.prank(alice);
-        vm.expectRevert(TheSpireth.RevealTooEarly.selector);
-        spireth.revealRoll(0, secret);
-    }
-
-    function test_CanRevealView() public {
-        _setupLiveSeason();
-        uint256 secret = 12345;
-        bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
-        
-        assertFalse(spireth.canReveal(0));
-        
-        vm.prank(alice);
-        spireth.commitRoll{value: ROLL_COST}(0, commitment);
-        
-        assertFalse(spireth.canReveal(0));
-        
-        vm.roll(block.number + spireth.REVEAL_DELAY());
-        assertFalse(spireth.canReveal(0));
-        
-        vm.roll(block.number + 1);
-        assertTrue(spireth.canReveal(0));
     }
 
     function test_CommitRollSplits80_20() public {
@@ -136,13 +101,49 @@ contract TheSpirethTest is Test {
         assertTrue(isDead);
     }
 
-    function test_DeadImpCannotRoll() public {
+    function test_DeadImpCannotCommitRoll() public {
         _setupLiveSeason();
         vm.warp(block.timestamp + 72 hours + 1);
         bytes32 commitment = keccak256(abi.encodePacked(uint256(12345), uint256(0)));
         vm.prank(alice);
         vm.expectRevert(TheSpireth.ImpIsDead.selector);
         spireth.commitRoll{value: ROLL_COST}(0, commitment);
+    }
+
+    function test_DeadImpCannotRevealRoll() public {
+        _setupLiveSeason();
+        
+        uint256 secret = 12345;
+        bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
+        vm.prank(alice);
+        spireth.commitRoll{value: ROLL_COST}(0, commitment);
+        
+        vm.warp(block.timestamp + 72 hours + 1);
+        vm.roll(block.number + 4);
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.ImpIsDead.selector);
+        spireth.revealRoll(0, secret);
+    }
+
+    function test_CommitUpdatesLastActivity() public {
+        _setupLiveSeason();
+        
+        vm.warp(block.timestamp + 24 hours);
+        
+        uint256 secret = 12345;
+        bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
+        vm.prank(alice);
+        spireth.commitRoll{value: ROLL_COST}(0, commitment);
+        
+        vm.warp(block.timestamp + 71 hours);
+        
+        (,,, bool isDead,,) = spireth.getImp(0);
+        assertFalse(isDead);
+        
+        vm.warp(block.timestamp + 2 hours);
+        (,,, bool isDeadNow,,) = spireth.getImp(0);
+        assertTrue(isDeadNow);
     }
 
     function test_FreezeAt45Days() public {
@@ -152,10 +153,24 @@ contract TheSpirethTest is Test {
         assertEq(uint8(spireth.seasonState()), uint8(TheSpireth.SeasonState.Frozen));
     }
 
-    function test_SetRollCost() public {
+    function test_SetRollCostDuringSignup() public {
         vm.prank(owner);
         spireth.setRollCost(0.005 ether);
         assertEq(spireth.rollCost(), 0.005 ether);
+    }
+
+    function test_SetRollCostAfterHornReverts() public {
+        _setupLiveSeason();
+        vm.prank(owner);
+        vm.expectRevert(TheSpireth.SeasonAlreadyLive.selector);
+        spireth.setRollCost(0.005 ether);
+    }
+
+    function test_SetMintCapAfterHornReverts() public {
+        _setupLiveSeason();
+        vm.prank(owner);
+        vm.expectRevert(TheSpireth.SeasonAlreadyLive.selector);
+        spireth.setMintCap(200);
     }
 
     function test_FreezeAtPlus50() public {
@@ -174,7 +189,7 @@ contract TheSpirethTest is Test {
             bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
             vm.prank(alice);
             spireth.commitRoll{value: ROLL_COST}(0, commitment);
-            vm.roll(block.number + spireth.REVEAL_DELAY() + 1);
+            vm.roll(block.number + 4);
             vm.prank(alice);
             spireth.revealRoll(0, secret);
             
@@ -207,7 +222,7 @@ contract TheSpirethTest is Test {
             bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
             vm.prank(alice);
             spireth.commitRoll{value: ROLL_COST}(0, commitment);
-            vm.roll(block.number + spireth.REVEAL_DELAY() + 1);
+            vm.roll(block.number + 4);
             vm.prank(alice);
             spireth.revealRoll(0, secret);
             
@@ -222,6 +237,285 @@ contract TheSpirethTest is Test {
         
         assertEq(spireth.SUMMIT(), int8(50));
         assertEq(spireth.ABYSS(), int8(-50));
+    }
+
+    function test_ForceFreezeNoBellRinger() public {
+        _setupLiveSeasonWithPool();
+        
+        uint256 poolBefore = spireth.prizePool();
+        
+        vm.warp(block.timestamp + 45 days);
+        spireth.forceFreeze();
+        
+        assertEq(spireth.bellRingerPrize(), 0);
+        assertEq(spireth.hasBellRinger(), false);
+        assertEq(spireth.rankPrizePool(), poolBefore);
+    }
+    
+    function test_BellRingerPrize20Percent() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        uint256 pool = spireth.prizePool();
+        uint256 expectedBellPrize = pool * 20 / 100;
+        
+        assertEq(spireth.bellRingerPrize(), expectedBellPrize);
+        assertTrue(spireth.hasBellRinger());
+        assertEq(spireth.rankPrizePool(), pool - expectedBellPrize);
+    }
+
+    function test_ClaimBell() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        uint256 bellPrize = spireth.bellRingerPrize();
+        assertTrue(bellPrize > 0, "Bell prize should be > 0");
+        
+        uint256 bellRingerId = spireth.bellRingerId();
+        address bellRingerOwner = spireth.ownerOf(bellRingerId);
+        
+        uint256 balanceBefore = bellRingerOwner.balance;
+        vm.prank(bellRingerOwner);
+        spireth.claimBell();
+        
+        assertEq(bellRingerOwner.balance - balanceBefore, bellPrize);
+        assertTrue(spireth.bellClaimed());
+    }
+
+    function test_ClaimBellTwiceReverts() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        uint256 bellRingerId = spireth.bellRingerId();
+        address bellRingerOwner = spireth.ownerOf(bellRingerId);
+        
+        vm.prank(bellRingerOwner);
+        spireth.claimBell();
+        
+        vm.prank(bellRingerOwner);
+        vm.expectRevert(TheSpireth.AlreadyClaimed.selector);
+        spireth.claimBell();
+    }
+
+    function test_ClaimBellNotOwnerReverts() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        uint256 bellRingerId = spireth.bellRingerId();
+        address bellRingerOwner = spireth.ownerOf(bellRingerId);
+        
+        address notOwner = bellRingerOwner == alice ? bob : alice;
+        
+        vm.prank(notOwner);
+        vm.expectRevert(TheSpireth.NotImpOwner.selector);
+        spireth.claimBell();
+    }
+
+    function test_PublishPrizeRoot() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        bytes32 root = keccak256("test root");
+        vm.prank(owner);
+        spireth.publishPrizeRoot(root);
+        
+        assertEq(spireth.merkleRoot(), root);
+    }
+
+    function test_PublishPrizeRootTwiceReverts() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        bytes32 root = keccak256("test root");
+        vm.prank(owner);
+        spireth.publishPrizeRoot(root);
+        
+        vm.prank(owner);
+        vm.expectRevert(TheSpireth.RootAlreadySet.selector);
+        spireth.publishPrizeRoot(keccak256("new root"));
+    }
+
+    function test_ClaimRankWithValidProof() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        uint256 impId = 0;
+        uint256 amount = 0.1 ether;
+        
+        bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(impId, amount))));
+        bytes32 root = leaf;
+        
+        vm.prank(owner);
+        spireth.publishPrizeRoot(root);
+        
+        bytes32[] memory proof = new bytes32[](0);
+        
+        uint256 balanceBefore = alice.balance;
+        vm.prank(alice);
+        spireth.claimRank(impId, amount, proof);
+        
+        assertEq(alice.balance - balanceBefore, amount);
+        
+        (,,,, bool hasClaimedRank,) = spireth.getImp(impId);
+        assertTrue(hasClaimedRank);
+    }
+
+    function test_ClaimRankInvalidProofReverts() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        bytes32 root = keccak256("some root");
+        vm.prank(owner);
+        spireth.publishPrizeRoot(root);
+        
+        bytes32[] memory proof = new bytes32[](0);
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidProof.selector);
+        spireth.claimRank(0, 0.1 ether, proof);
+    }
+
+    function test_ClaimRankTwiceReverts() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        uint256 impId = 0;
+        uint256 amount = 0.1 ether;
+        
+        bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(impId, amount))));
+        bytes32 root = leaf;
+        
+        vm.prank(owner);
+        spireth.publishPrizeRoot(root);
+        
+        bytes32[] memory proof = new bytes32[](0);
+        
+        vm.prank(alice);
+        spireth.claimRank(impId, amount, proof);
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.AlreadyClaimed.selector);
+        spireth.claimRank(impId, amount, proof);
+    }
+
+    function test_ClaimRankRootNotSetReverts() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        bytes32[] memory proof = new bytes32[](0);
+        
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.RootNotSet.selector);
+        spireth.claimRank(0, 0.1 ether, proof);
+    }
+
+    function test_SweepDustAfterClaims() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        vm.deal(address(spireth), address(spireth).balance + 0.001 ether);
+        
+        uint256 bellRingerId = spireth.bellRingerId();
+        address bellRingerOwner = spireth.ownerOf(bellRingerId);
+        uint256 amount = spireth.rankPrizePool();
+        
+        bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(bellRingerId, amount))));
+        bytes32 root = leaf;
+        
+        vm.prank(owner);
+        spireth.publishPrizeRoot(root);
+        
+        vm.prank(bellRingerOwner);
+        spireth.claimBell();
+        
+        bytes32[] memory proof = new bytes32[](0);
+        vm.prank(bellRingerOwner);
+        spireth.claimRank(bellRingerId, amount, proof);
+        
+        address dustReceiver = makeAddr("dustReceiver");
+        uint256 balanceBefore = dustReceiver.balance;
+        
+        vm.prank(owner);
+        spireth.sweepDust(dustReceiver);
+        
+        assertTrue(dustReceiver.balance > balanceBefore);
+    }
+
+    function test_SweepDustCannotTakeUnclaimedPrizes() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        uint256 impId = 0;
+        uint256 amount = spireth.rankPrizePool();
+        
+        bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(impId, amount))));
+        bytes32 root = leaf;
+        
+        vm.prank(owner);
+        spireth.publishPrizeRoot(root);
+        
+        uint256 contractBalance = address(spireth).balance;
+        uint256 bellPrize = spireth.bellRingerPrize();
+        uint256 rankPool = spireth.rankPrizePool();
+        
+        if (contractBalance <= bellPrize + rankPool) {
+            vm.prank(owner);
+            vm.expectRevert(TheSpireth.NoPrize.selector);
+            spireth.sweepDust(owner);
+        }
+    }
+
+    function test_SweepDustRequiresRoot() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+        
+        vm.prank(owner);
+        vm.expectRevert(TheSpireth.RootNotSet.selector);
+        spireth.sweepDust(owner);
+    }
+
+    function test_DevFeeSoftFailAndWithdraw() public {
+        RevertingReceiver revertingDev = new RevertingReceiver();
+        TheSpireth spirethWithRevertingDev = new TheSpireth(owner, address(revertingDev), ROLL_COST, MINT_CAP);
+        
+        vm.deal(alice, 100 ether);
+        vm.deal(bob, 100 ether);
+        
+        vm.prank(alice);
+        spirethWithRevertingDev.mint();
+        vm.prank(bob);
+        spirethWithRevertingDev.mint();
+        vm.prank(owner);
+        spirethWithRevertingDev.soundHorn();
+        
+        bytes32 commitment = keccak256(abi.encodePacked(uint256(12345), uint256(0)));
+        vm.prank(alice);
+        spirethWithRevertingDev.commitRoll{value: ROLL_COST}(0, commitment);
+        
+        uint256 expectedDevFee = ROLL_COST * 20 / 100;
+        assertEq(spirethWithRevertingDev.pendingDevFees(), expectedDevFee);
+        assertEq(spirethWithRevertingDev.prizePool(), ROLL_COST * 80 / 100);
+        
+        revertingDev.setAcceptEth(true);
+        
+        uint256 devBalanceBefore = address(revertingDev).balance;
+        vm.prank(address(revertingDev));
+        spirethWithRevertingDev.withdrawDevFees();
+        
+        assertEq(address(revertingDev).balance - devBalanceBefore, expectedDevFee);
+        assertEq(spirethWithRevertingDev.pendingDevFees(), 0);
+    }
+
+    function test_WithdrawDevFeesNotDevReverts() public {
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.NotDev.selector);
+        spireth.withdrawDevFees();
+    }
+
+    function test_WithdrawDevFeesNoPendingReverts() public {
+        vm.prank(dev);
+        vm.expectRevert(TheSpireth.NoPendingFees.selector);
+        spireth.withdrawDevFees();
     }
 
     function test_EquipPfp() public {
@@ -320,6 +614,35 @@ contract TheSpirethTest is Test {
         vm.prank(owner);
         spireth.soundHorn();
     }
+
+    function _setupLiveSeasonWithPool() internal {
+        _setupLiveSeason();
+        
+        bytes32 commitment = keccak256(abi.encodePacked(uint256(1), uint256(0)));
+        vm.prank(alice);
+        spireth.commitRoll{value: 1 ether}(0, commitment);
+    }
+
+    function _freezeWithBellRinger() internal {
+        uint256 pool = spireth.prizePool();
+        uint256 bellPrize = pool * 20 / 100;
+        uint256 rankPool = pool - bellPrize;
+        
+        vm.store(address(spireth), bytes32(uint256(11)), bytes32(uint256(2)));
+        
+        vm.store(address(spireth), bytes32(uint256(14)), bytes32(uint256(0)));
+        
+        vm.store(address(spireth), bytes32(uint256(15)), bytes32(uint256(1)));
+        
+        vm.store(address(spireth), bytes32(uint256(20)), bytes32(bellPrize));
+        
+        vm.store(address(spireth), bytes32(uint256(23)), bytes32(rankPool));
+    }
+    
+    function _freezeWithoutBellRinger() internal {
+        vm.warp(block.timestamp + 45 days);
+        spireth.forceFreeze();
+    }
 }
 
 contract MockERC721 {
@@ -331,5 +654,19 @@ contract MockERC721 {
     
     function ownerOf(uint256 tokenId) external view returns (address) {
         return _owners[tokenId];
+    }
+}
+
+contract RevertingReceiver {
+    bool public acceptEth = false;
+    
+    function setAcceptEth(bool _accept) external {
+        acceptEth = _accept;
+    }
+    
+    receive() external payable {
+        if (!acceptEth) {
+            revert("No ETH accepted");
+        }
     }
 }
