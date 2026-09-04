@@ -154,24 +154,19 @@ function buildSummary(
     }
   })
 
-  entries.sort((a, b) => {
-    const absA = Math.abs(a.height)
-    const absB = Math.abs(b.height)
-    if (absB !== absA) return absB - absA
+  const paidEntries = paidRanks.map((r) => {
+    const entry = entries.find((e) => e.id === r.imp.id)!
+    return entry
+  })
+
+  paidEntries.sort((a, b) => {
     if (b.payoutUsd !== a.payoutUsd) return b.payoutUsd - a.payoutUsd
     if (a.id < b.id) return -1
     if (a.id > b.id) return 1
     return 0
   })
 
-  let top10 = entries.slice(0, 10)
-  const winnerInTop10 = top10.some((e) => e.isWinner)
-  if (!winnerInTop10) {
-    const winnerEntry = entries.find((e) => e.isWinner)
-    if (winnerEntry) {
-      top10 = [winnerEntry, ...top10.slice(0, 9)]
-    }
-  }
+  const top10 = paidEntries.filter((e) => e.netUsd >= 0).slice(0, 10)
 
   return {
     winnerId,

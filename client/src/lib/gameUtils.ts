@@ -1,19 +1,19 @@
 export const FLOOR_MIN = -50
 export const FLOOR_MAX = 50
-/** pet.game Pepe sheet cell size (336×44, 12 cols × 2 rows, black bg). */
-export const FRAME_W = 28
+/** pet.game Pepe sheet cell size (336×44, 14 cols × 2 rows, black bg). */
+export const FRAME_W = 24
 export const FRAME_H = 22
-/** Canvas draw height for one Pepe (preserves 28:22 aspect via DISPLAY_WIDTH). */
-export const DISPLAY_HEIGHT = 9
+/** Canvas draw height for one Pepe (preserves 24:22 aspect via DISPLAY_WIDTH). */
+export const DISPLAY_HEIGHT = 20
 export const DISPLAY_SCALE = DISPLAY_HEIGHT / FRAME_H
 export const DISPLAY_WIDTH = FRAME_W * DISPLAY_SCALE
 /** Source-pixel Y where feet meet the ground (for platform alignment). */
 export const FRAME_FOOT_Y = 20
 
 /**
- * Pepe frame map (col, row) on the pet.game sheet:
- * - Row 0: front idle/walk 0–3, talk/expressions 4–9, dead 10–11
- * - Row 1: side walk 0–3 (mirror for left), jump stride 6–7, back 8–9
+ * Pepe frame map (col, row) on the pet.game sheet (14 cols × 2 rows):
+ * - Row 0: front idle/walk 0–3, talk/expressions 4–11, squat/dead 12–13
+ * - Row 1: side walk 0–3 (mirror for left), jump stride 6–7, back 8–9, empty 12–13
  */
 export interface PepeFrame {
   col: number
@@ -63,7 +63,7 @@ export function pepeRevealFrame(timerMs: number): PepeFrame {
 }
 
 export function pepeDeadFrame(): PepeFrame {
-  return { col: 11, row: 0 }
+  return { col: 12, row: 0 }
 }
 
 export const PLATFORM_TILE_SIZE = 48
