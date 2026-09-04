@@ -18,6 +18,15 @@ export const BELL_BONUS_PCT = 20
 
 export type SimOutcome = 'summit' | 'abyss'
 
+export interface Top10Entry {
+  id: bigint
+  height: number
+  spentUsd: number
+  payoutUsd: number
+  netUsd: number
+  isWinner: boolean
+}
+
 export interface SimSummary {
   winnerId: bigint
   outcome: SimOutcome
@@ -31,6 +40,7 @@ export interface SimSummary {
   waves: number
   durationMs: number
   livingAtEnd: number
+  top10: Top10Entry[]
 }
 
 export interface SimStats {
@@ -85,9 +95,53 @@ function buildSummary(
   waves: number,
   startedAt: number,
   livingAtEnd: number,
+  imps: ImpData[],
+  rollCounts: Map<string, number>,
+  heights: Map<string, number>,
 ): SimSummary {
   const bellBonusUsd = Math.round(poolUsd * (BELL_BONUS_PCT / 100))
   const remainingPoolUsd = poolUsd - bellBonusUsd
+  const livingShare = livingAtEnd > 0 ? remainingPoolUsd / livingAtEnd : 0
+
+  const entries: Top10Entry[] = imps.map((imp) => {
+    const key = imp.id.toString()
+    const impRolls = rollCounts.get(key) ?? 0
+    const impHeight = heights.get(key) ?? imp.height
+    const spentUsd = impRolls * ROLL_USD
+    const isWinner = imp.id === winnerId
+    const isLiving = !imp.isDead
+    let payoutUsd = 0
+    if (isLiving) {
+      payoutUsd = livingShare + (isWinner ? bellBonusUsd : 0)
+    }
+    return {
+      id: imp.id,
+      height: impHeight,
+      spentUsd,
+      payoutUsd: Math.round(payoutUsd),
+      netUsd: Math.round(payoutUsd - spentUsd),
+      isWinner,
+    }
+  })
+
+  entries.sort((a, b) => {
+    const absA = Math.abs(a.height)
+    const absB = Math.abs(b.height)
+    if (absB !== absA) return absB - absA
+    if (b.payoutUsd !== a.payoutUsd) return b.payoutUsd - a.payoutUsd
+    if (a.id < b.id) return -1
+    if (a.id > b.id) return 1
+    return 0
+  })
+
+  let top10 = entries.slice(0, 10)
+  const winnerInTop10 = top10.some((e) => e.isWinner)
+  if (!winnerInTop10) {
+    const winnerEntry = entries.find((e) => e.isWinner)
+    if (winnerEntry) {
+      top10 = [winnerEntry, ...top10.slice(0, 9)]
+    }
+  }
 
   return {
     winnerId,
@@ -102,6 +156,7 @@ function buildSummary(
     waves,
     durationMs: Date.now() - startedAt,
     livingAtEnd,
+    top10,
   }
 }
 
@@ -134,6 +189,7 @@ export function useSimulateCompetition() {
   const impsRef = useRef<ImpData[]>([])
   const pendingTimeoutsRef = useRef<number[]>([])
   const jumpEndTimesRef = useRef<Map<string, number>>(new Map())
+  const rollCountsRef = useRef<Map<string, number>>(new Map())
   const rollsRef = useRef(0)
   const poolUsdRef = useRef(0)
   const devUsdRef = useRef(0)
@@ -193,16 +249,20 @@ export function useSimulateCompetition() {
           wavesRef.current,
           startedAtRef.current,
           livingAtEnd,
+          impsRef.current,
+          rollCountsRef.current,
+          heightsRef.current,
         ),
       )
     },
     [],
   )
 
-  const recordRollEconomics = useCallback(() => {
+  const recordRollEconomics = useCallback((impKey: string) => {
     rollsRef.current += 1
     poolUsdRef.current += POOL_SHARE_USD
     devUsdRef.current += DEV_SHARE_USD
+    rollCountsRef.current.set(impKey, (rollCountsRef.current.get(impKey) ?? 0) + 1)
   }, [])
 
   const scheduleRollForImp = useCallback(
@@ -225,7 +285,7 @@ export function useSimulateCompetition() {
         const newHeight = clampFloor(currentHeight + dice)
 
         heightsRef.current.set(key, newHeight)
-        recordRollEconomics()
+        recordRollEconomics(key)
 
         const jumpMs = jumpDurationMs(currentHeight, newHeight)
         const revealAt = Date.now()
@@ -266,6 +326,7 @@ export function useSimulateCompetition() {
     }
     heightsRef.current.clear()
     jumpEndTimesRef.current.clear()
+    rollCountsRef.current.clear()
     rollsRef.current = 0
     poolUsdRef.current = 0
     devUsdRef.current = 0
