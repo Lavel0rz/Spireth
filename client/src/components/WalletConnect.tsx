@@ -1,14 +1,46 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { useAccount, useConnect, useDisconnect, useChainId, useSwitchChain } from 'wagmi'
 import { foundry } from 'wagmi/chains'
 
+const connectButtonClass =
+  'px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-medium rounded-lg transition disabled:opacity-50'
+
+function getInjectedConnector(connectors: ReturnType<typeof useConnect>['connectors']) {
+  return (
+    connectors.find((c) => c.id === 'injected') ??
+    connectors.find((c) => c.type === 'injected') ??
+    connectors[0]
+  )
+}
+
 export function WalletConnect() {
+  const [mounted, setMounted] = useState(false)
   const { address, isConnected } = useAccount()
   const { connect, connectors, isPending } = useConnect()
   const { disconnect } = useDisconnect()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  const handleConnect = () => {
+    const connector = getInjectedConnector(connectors)
+    if (connector) {
+      connect({ connector })
+    }
+  }
+
+  if (!mounted) {
+    return (
+      <button type="button" disabled className={connectButtonClass}>
+        Connect Wallet
+      </button>
+    )
+  }
 
   if (isConnected && address) {
     return (
@@ -20,6 +52,7 @@ export function WalletConnect() {
           </span>
           {chainId !== foundry.id && (
             <button
+              type="button"
               onClick={() => switchChain({ chainId: foundry.id })}
               className="text-xs px-2 py-1 bg-amber-500/20 text-amber-400 rounded hover:bg-amber-500/30 transition"
             >
@@ -28,6 +61,7 @@ export function WalletConnect() {
           )}
         </div>
         <button
+          type="button"
           onClick={() => disconnect()}
           className="px-4 py-2 text-sm bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg transition"
         >
@@ -38,17 +72,13 @@ export function WalletConnect() {
   }
 
   return (
-    <div className="flex gap-2">
-      {connectors.map((connector) => (
-        <button
-          key={connector.uid}
-          onClick={() => connect({ connector })}
-          disabled={isPending}
-          className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-medium rounded-lg transition disabled:opacity-50"
-        >
-          {isPending ? 'Connecting...' : 'Connect Wallet'}
-        </button>
-      ))}
-    </div>
+    <button
+      type="button"
+      onClick={handleConnect}
+      disabled={isPending || connectors.length === 0}
+      className={connectButtonClass}
+    >
+      {isPending ? 'Connecting...' : 'Connect Wallet'}
+    </button>
   )
 }
