@@ -101,7 +101,36 @@ function buildSummary(
 ): SimSummary {
   const bellBonusUsd = Math.round(poolUsd * (BELL_BONUS_PCT / 100))
   const remainingPoolUsd = poolUsd - bellBonusUsd
-  const livingShare = livingAtEnd > 0 ? remainingPoolUsd / livingAtEnd : 0
+
+  const livingImps = imps.filter((imp) => !imp.isDead)
+  const isSummit = outcome === 'summit'
+
+  const rankedLiving = livingImps
+    .map((imp) => ({
+      imp,
+      height: heights.get(imp.id.toString()) ?? imp.height,
+    }))
+    .sort((a, b) => {
+      const cmp = isSummit ? b.height - a.height : a.height - b.height
+      if (cmp !== 0) return cmp
+      return a.imp.id < b.imp.id ? -1 : a.imp.id > b.imp.id ? 1 : 0
+    })
+
+  const paidCount = Math.ceil(rankedLiving.length / 2)
+  const paidRanks = rankedLiving.slice(0, paidCount)
+
+  let sumWeights = 0
+  for (let i = 0; i < paidCount; i++) {
+    const w = (paidCount - i) * (paidCount - i)
+    sumWeights += w
+  }
+
+  const rankPayouts = new Map<string, number>()
+  for (let i = 0; i < paidCount; i++) {
+    const weight = (paidCount - i) * (paidCount - i)
+    const share = sumWeights > 0 ? (remainingPoolUsd * weight) / sumWeights : 0
+    rankPayouts.set(paidRanks[i].imp.id.toString(), share)
+  }
 
   const entries: Top10Entry[] = imps.map((imp) => {
     const key = imp.id.toString()
@@ -112,7 +141,8 @@ function buildSummary(
     const isLiving = !imp.isDead
     let payoutUsd = 0
     if (isLiving) {
-      payoutUsd = livingShare + (isWinner ? bellBonusUsd : 0)
+      const rankShare = rankPayouts.get(key) ?? 0
+      payoutUsd = rankShare + (isWinner ? bellBonusUsd : 0)
     }
     return {
       id: imp.id,
