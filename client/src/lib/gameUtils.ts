@@ -4,7 +4,7 @@ export const FLOOR_MAX = 50
 export const FRAME_W = 28
 export const FRAME_H = 22
 /** Canvas draw height for one Pepe (preserves 28:22 aspect via DISPLAY_WIDTH). */
-export const DISPLAY_HEIGHT = 20
+export const DISPLAY_HEIGHT = 9
 export const DISPLAY_SCALE = DISPLAY_HEIGHT / FRAME_H
 export const DISPLAY_WIDTH = FRAME_W * DISPLAY_SCALE
 /** Source-pixel Y where feet meet the ground (for platform alignment). */

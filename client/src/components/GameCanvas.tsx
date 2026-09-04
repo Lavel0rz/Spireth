@@ -46,7 +46,7 @@ const CANVAS_H = BOARD_CANVAS_H
 const CENTER_X = CANVAS_W / 2
 const HIT_RADIUS_RATIO = 0.65
 const CROWDED_FLOOR_THRESHOLD = 4
-const CROWDED_SPRITE_SCALE = 0.82
+const CROWDED_SPRITE_SCALE = 0.88
 const JUMP_ARC_HEIGHT = 7
 const COMMIT_BOUNCE = { dip: 1, peak: -5, settle: -2 } as const
 
@@ -72,6 +72,8 @@ interface CharacterEntity {
   isDead: boolean
   isSelected: boolean
   yOffset: number
+  dice: number | null
+  diceShowUntil: number
 }
 
 export interface GameCanvasDisplayMetrics {
@@ -292,6 +294,33 @@ function drawIdBadge(
   ctx.fillText(label, labelX, labelY)
 }
 
+function drawDiceBadge(
+  ctx: CanvasRenderingContext2D,
+  charX: number,
+  charY: number,
+  drawW: number,
+  dice: number,
+) {
+  const label = dice > 0 ? `+${dice}` : `${dice}`
+  const labelX = charX + drawW / 2
+  const labelY = charY - 14
+
+  ctx.font = 'bold 7px monospace'
+  ctx.textAlign = 'center'
+  const metrics = ctx.measureText(label)
+  const padX = 2
+  const boxW = metrics.width + padX * 2
+  const boxH = 8
+  const boxX = labelX - boxW / 2
+  const boxY = labelY - boxH + 1
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'
+  ctx.fillRect(boxX, boxY, boxW, boxH)
+
+  ctx.fillStyle = dice > 0 ? '#34d399' : '#f87171'
+  ctx.fillText(label, labelX, labelY)
+}
+
 export function GameCanvas({
   imps,
   selectedImpId,
@@ -366,6 +395,8 @@ export function GameCanvas({
           isDead: imp.isDead,
           isSelected,
           yOffset: 0,
+          dice: null,
+          diceShowUntil: 0,
         })
       } else {
         if (existing.animState === 'jump') {
@@ -424,8 +455,10 @@ export function GameCanvas({
         entity.animState = 'revealPending'
         entity.animTimer = 0
       } else if (event.type === 'reveal') {
+        entity.dice = event.dice
         if (event.newHeight === entity.displayHeight) {
           entity.animState = 'walk'
+          entity.diceShowUntil = Date.now() + 600
           return
         }
         entity.animState = 'jump'
@@ -435,6 +468,7 @@ export function GameCanvas({
         entity.jumpDuration = jumpDurationMs(entity.jumpFrom, entity.jumpTo)
         entity.animTimer = 0
         entity.facing = event.dice > 0 ? 'up' : 'down'
+        entity.diceShowUntil = Date.now() + entity.jumpDuration + 400
       }
     })
   }, [subscribe])
@@ -592,8 +626,6 @@ export function GameCanvas({
         }
       }
 
-      const clusterLabels: { x: number; y: number; extra: number }[] = []
-
       const sorted = [...entitiesRef.current.values()].sort(
         (a, b) => a.displayHeight - b.displayHeight,
       )
@@ -657,29 +689,12 @@ export function GameCanvas({
           entity.isDead,
         )
 
-        if (peerCount > CROWDED_FLOOR_THRESHOLD) {
-          const peerIds = peersOnFloor(entitiesRef.current, floorHeight)
-          const sortedPeers = [...peerIds].sort((a, b) => parseInt(a, 10) - parseInt(b, 10))
-          if (sortedPeers[0] === entity.impId) {
-            clusterLabels.push({
-              x: px + pw / 2,
-              y: floorY - 18,
-              extra: peerCount - 3,
-            })
-          }
+        const showDice =
+          entity.dice !== null &&
+          (entity.animState === 'jump' || Date.now() < entity.diceShowUntil)
+        if (showDice) {
+          drawDiceBadge(ctx, charX, charY, drawW, entity.dice!)
         }
-      }
-
-      for (const cluster of clusterLabels) {
-        if (cluster.extra <= 0) continue
-        const text = `+${cluster.extra}`
-        ctx.font = 'bold 8px monospace'
-        ctx.textAlign = 'center'
-        const tw = ctx.measureText(text).width + 8
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'
-        ctx.fillRect(cluster.x - tw / 2, cluster.y - 8, tw, 12)
-        ctx.fillStyle = '#fbbf24'
-        ctx.fillText(text, cluster.x, cluster.y)
       }
 
       rafRef.current = requestAnimationFrame(tick)

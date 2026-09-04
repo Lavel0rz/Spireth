@@ -87,8 +87,9 @@ export function SimSummaryModal({
         <div className="rounded-lg border border-amber-700/40 bg-amber-950/30 px-3 py-2.5 text-xs text-amber-100/90 mb-4">
           <span className="font-semibold text-amber-200">Bell bonus:</span>{' '}
           Pepe #{summary.winnerId.toString()} earns {formatUsd(summary.bellBonusUsd)} (
-          {BELL_BONUS_PCT}% of pool). Remaining pool for survivors:{' '}
-          {formatUsd(summary.remainingPoolUsd)} across {summary.livingAtEnd} living Pepes.
+          {BELL_BONUS_PCT}% of pool). Remaining {formatUsd(summary.remainingPoolUsd)} distributed
+          rank-weighted to top {Math.ceil(summary.livingAtEnd / 2)} of {summary.livingAtEnd} living
+          Pepes (bottom half + dead get $0 ranking pay).
         </div>
 
         <div className="mb-5">
