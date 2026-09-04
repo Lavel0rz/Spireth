@@ -1,8 +1,66 @@
 export const FLOOR_MIN = -50
 export const FLOOR_MAX = 50
-export const SPRITE_SIZE = 48
+/** pet.game Pepe sheet cell size (336×44, 12 cols × 2 rows, black bg). */
+export const FRAME_W = 28
+export const FRAME_H = 22
 export const DISPLAY_SIZE = 14
-export const FRAME_COLS = 4
+/** Source-pixel Y where feet meet the ground (for platform alignment). */
+export const FRAME_FOOT_Y = 20
+
+/**
+ * Pepe frame map (col, row) on the pet.game sheet:
+ * - Row 0: front idle/walk 0–3, talk/expressions 4–9, dead 10–11
+ * - Row 1: side walk 0–3 (mirror for left), jump stride 6–7, back 8–9
+ */
+export interface PepeFrame {
+  col: number
+  row: number
+  flipX?: boolean
+}
+
+const WALK_FRONT_COLS = [0, 1, 2, 3]
+const WALK_SIDE_COLS = [0, 1, 2, 3]
+const JUMP_SIDE_COLS = [1, 2]
+const REVEAL_COLS = [0, 2]
+
+export function pepeWalkFrame(facing: Direction, frame: number): PepeFrame {
+  const f = frame % 4
+  switch (facing) {
+    case 'down':
+      return { col: WALK_FRONT_COLS[f], row: 0 }
+    case 'up':
+      return { col: 8 + (f % 2), row: 1 }
+    case 'right':
+      return { col: WALK_SIDE_COLS[f], row: 1 }
+    case 'left':
+      return { col: WALK_SIDE_COLS[f], row: 1, flipX: true }
+  }
+}
+
+export function pepeJumpFrame(facing: Direction, frame: number): PepeFrame {
+  switch (facing) {
+    case 'up':
+      return { col: 8, row: 1 }
+    case 'down':
+      return { col: 2, row: 0 }
+    case 'right':
+      return { col: JUMP_SIDE_COLS[frame % 2], row: 1 }
+    case 'left':
+      return { col: JUMP_SIDE_COLS[frame % 2], row: 1, flipX: true }
+  }
+}
+
+export function pepeCommitFrame(timerMs: number): PepeFrame {
+  return { col: timerMs < 250 ? 9 : 4, row: 0 }
+}
+
+export function pepeRevealFrame(timerMs: number): PepeFrame {
+  return { col: REVEAL_COLS[Math.floor(timerMs / 120) % 2], row: 0 }
+}
+
+export function pepeDeadFrame(): PepeFrame {
+  return { col: 11, row: 0 }
+}
 
 export const PLATFORM_TILE_SIZE = 48
 export const PLATFORM_TILE_SRC_Y = 64
@@ -21,13 +79,6 @@ export const PLATFORM_STRIP_SOURCES = {
 } as const
 
 export type Direction = 'down' | 'up' | 'left' | 'right'
-
-export const DIRECTION_ROW: Record<Direction, number> = {
-  down: 0,
-  up: 1,
-  right: 2,
-  left: 3,
-}
 
 export interface ImpData {
   id: bigint
