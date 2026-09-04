@@ -321,11 +321,24 @@ export function GameCanvas({
         const isSummit = level === FLOOR_MAX
         const isAbyss = level === FLOOR_MIN
 
-        const tile = isAbyss || level < -10 ? sprites.hills : sprites.grass
-        const tileW = tile.width / 2
-        for (let tx = 0; tx < pw; tx += tileW) {
-          const drawW = Math.min(tileW, pw - tx)
-          ctx.drawImage(tile, 0, 0, drawW, tile.height, px + tx, y - 4, drawW, 10)
+        const tile =
+          isAbyss || level < -15
+            ? sprites.hills
+            : level < -5
+              ? sprites.stone
+              : sprites.grass
+        const fillY = tile === sprites.grass ? 64 : tile === sprites.stone ? 64 : 64
+        const fillH = 48
+        const fillW = 48
+        for (let tx = 0; tx < pw; tx += fillW) {
+          const drawW = Math.min(fillW, pw - tx)
+          ctx.drawImage(tile, 0, fillY, drawW, fillH, px + tx, y - 6, drawW, 12)
+        }
+
+        if (level <= -20) {
+          for (let tx = 0; tx < pw; tx += 16) {
+            ctx.drawImage(sprites.water, 0, 0, 16, sprites.water.height, px + tx, y + 8, 16, 6)
+          }
         }
 
         let borderColor = '#3f3f46'
@@ -355,23 +368,58 @@ export function GameCanvas({
         const charX = px + entity.floorX * pw - DISPLAY_SIZE / 2
         const charY = floorY - DISPLAY_SIZE + 8 + entity.yOffset
 
-        const row = DIRECTION_ROW[entity.facing]
-        const col = entity.frame % 4
-        const sx = col * SPRITE_SIZE
-        const sy = row * SPRITE_SIZE
+        const useActions =
+          entity.animState === 'commit' ||
+          entity.animState === 'revealPending' ||
+          entity.animState === 'jump'
 
-        drawTintedFrame(
-          ctx,
-          offscreenRef.current!,
-          sprites.walk,
-          sx,
-          sy,
-          charX,
-          charY,
-          DISPLAY_SIZE,
-          entity.tint,
-          entity.isDead,
-        )
+        if (useActions) {
+          let actionRow = 0
+          let actionCol = 0
+          if (entity.animState === 'commit') {
+            actionRow = 0
+            actionCol = entity.animTimer < 250 ? 0 : 1
+          } else if (entity.animState === 'revealPending') {
+            actionRow = 0
+            actionCol = Math.floor(entity.animTimer / 120) % 2
+          } else if (entity.facing === 'up') {
+            actionRow = 0
+            actionCol = entity.jumpProgress < 0.5 ? 1 : 0
+          } else if (entity.facing === 'down') {
+            actionRow = 2
+            actionCol = entity.jumpProgress < 0.5 ? 1 : 0
+          } else {
+            actionRow = entity.facing === 'right' ? 2 : 3
+            actionCol = entity.frame % 2
+          }
+          drawTintedFrame(
+            ctx,
+            offscreenRef.current!,
+            sprites.actions,
+            actionCol * SPRITE_SIZE,
+            actionRow * SPRITE_SIZE,
+            charX,
+            charY,
+            DISPLAY_SIZE,
+            entity.tint,
+            entity.isDead,
+          )
+        } else {
+          const row = DIRECTION_ROW[entity.facing]
+          const col = entity.frame % 4
+          drawTintedFrame(
+            ctx,
+            offscreenRef.current!,
+            sprites.walk,
+            col * SPRITE_SIZE,
+            row * SPRITE_SIZE,
+            charX,
+            charY,
+            DISPLAY_SIZE,
+            entity.tint,
+            entity.isDead,
+          )
+        }
 
         if (entity.isSelected) {
           ctx.strokeStyle = '#a78bfa'
