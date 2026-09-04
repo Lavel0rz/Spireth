@@ -168,7 +168,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   if (!address) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Character</h2>
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Pepe</h2>
         <p className="text-zinc-400">Connect your wallet to play.</p>
       </div>
     )
@@ -179,7 +179,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
         <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Spireth</h2>
         <p className="text-zinc-400">
-          {isMintConfirming || joinedOptimistic ? 'Joined! Loading your character…' : 'Confirm in wallet…'}
+          {isMintConfirming || joinedOptimistic ? 'Joined! Loading your Pepe…' : 'Confirm in wallet…'}
         </p>
       </div>
     )
@@ -200,8 +200,8 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
         <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Spireth</h2>
         <p className="text-zinc-400 mb-4">
           {isLive
-            ? 'The horn has sounded, but late joiners are welcome. One character per wallet — join and appear on the tower.'
-            : 'One character per wallet. Join free during signup and appear on the tower.'}
+            ? 'The horn has sounded, but late joiners are welcome. One Pepe per wallet — join and appear on the tower.'
+            : 'One Pepe per wallet. Join free during signup and appear on the tower.'}
         </p>
         <button
           onClick={() => mint()}
@@ -230,7 +230,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
         <h2 className="text-lg font-semibold text-zinc-200 mb-4">Mint Cap Reached</h2>
         <p className="text-zinc-400">
-          All Imp slots for this season have been claimed. Watch the race unfold!
+          All Pepe slots for this season have been claimed. Watch the race unfold!
         </p>
       </div>
     )
@@ -239,9 +239,9 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   if (impId === null) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Character</h2>
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Your Pepe</h2>
         <p className="text-zinc-400">
-          {hasMinted === true ? 'Loading your character…' : 'Select your character on the board.'}
+          {hasMinted === true ? 'Loading your Pepe…' : 'Select your Pepe on the board.'}
         </p>
       </div>
     )
@@ -255,7 +255,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
     <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6 space-y-4">
       <div className="flex justify-between items-start">
         <h2 className="text-lg font-semibold text-zinc-200">
-          Imp #{impId.toString()}
+          Pepe #{impId.toString()}
           {isDead && <span className="ml-2 text-red-400 text-sm">(Dead)</span>}
         </h2>
         {isOwner && <span className="text-xs px-2 py-1 bg-violet-500/20 text-violet-400 rounded">Yours</span>}
@@ -408,7 +408,7 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
                     {isEquipping ? 'Confirming...' : isEquipConfirming ? 'Equipping...' : 'Equip NFT as PFP'}
                   </button>
                   <p className="text-xs text-zinc-500">
-                    You must own both the Imp and the NFT to equip it as your profile picture.
+                    You must own both the Pepe and the NFT to equip it as your profile picture.
                   </p>
                 </div>
               )}
