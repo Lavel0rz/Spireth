@@ -26,6 +26,28 @@ contract TheSpirethTest is Test {
         assertTrue(spireth.hasMinted(alice));
     }
 
+    function test_MintDuringLiveSeason() public {
+        _setupLiveSeason();
+
+        vm.prank(charlie);
+        spireth.mint();
+
+        assertEq(spireth.ownerOf(2), charlie);
+        assertEq(spireth.totalMinted(), 3);
+        assertTrue(spireth.hasMinted(charlie));
+        assertEq(uint8(spireth.seasonState()), uint8(TheSpireth.SeasonState.Live));
+    }
+
+    function test_MintRevertsWhenFrozen() public {
+        _setupLiveSeason();
+        vm.warp(block.timestamp + 45 days);
+        spireth.forceFreeze();
+
+        vm.prank(charlie);
+        vm.expectRevert(TheSpireth.NotInSignup.selector);
+        spireth.mint();
+    }
+
     function test_MintOnePerWallet() public {
         vm.startPrank(alice);
         spireth.mint();

@@ -12,6 +12,8 @@ import {
   useRollCost,
   useSeasonState,
   useHasMinted,
+  useMintCap,
+  useTotalMinted,
   useMint,
   useCommitRoll,
   useRevealRoll,
@@ -47,6 +49,8 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   const { address } = useAccount()
   const { data: seasonState } = useSeasonState()
   const { data: hasMinted } = useHasMinted(address)
+  const { data: mintCap } = useMintCap()
+  const { data: totalMinted } = useTotalMinted()
   const { data: rollCost } = useRollCost()
   
   const { data: impData } = useImp(impId ?? ZERO)
@@ -72,6 +76,14 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
   const isSignup = seasonState !== undefined && BigInt(seasonState as bigint) === ZERO
   const isLive = seasonState !== undefined && BigInt(seasonState as bigint) === BigInt(1)
   const isFrozen = seasonState !== undefined && BigInt(seasonState as bigint) === BigInt(2)
+  const mintedCount = totalMinted !== undefined ? Number(totalMinted) : 0
+  const cap = mintCap !== undefined ? Number(mintCap) : 0
+  const canJoin =
+    !hasMinted &&
+    (isSignup || isLive) &&
+    mintCap !== undefined &&
+    totalMinted !== undefined &&
+    mintedCount < cap
   
   const impDataArray = impData as [number, bigint, bigint, boolean, boolean, string] | undefined
   const height = impDataArray ? impDataArray[0] : 0
@@ -139,30 +151,43 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
     )
   }
 
-  if (isSignup && !hasMinted) {
+  if (canJoin) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
         <h2 className="text-lg font-semibold text-zinc-200 mb-4">Join the Race</h2>
         <p className="text-zinc-400 mb-4">
-          Mint your Imp to join The Spireth. Free mint, one per wallet.
+          {isLive
+            ? 'The horn has sounded, but late joiners are welcome. Mint your Imp to enter the climb.'
+            : 'Mint your Imp to join The Spireth. Free mint, one per wallet.'}
         </p>
         <button
           onClick={() => mint()}
           disabled={isMinting || isMintConfirming}
           className="w-full px-4 py-3 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-semibold rounded-lg transition disabled:opacity-50"
         >
-          {isMinting ? 'Confirming...' : isMintConfirming ? 'Minting...' : 'Mint Your Imp'}
+          {isMinting ? 'Confirming...' : isMintConfirming ? 'Minting...' : 'Join — Mint Your Imp'}
         </button>
       </div>
     )
   }
 
-  if (!hasMinted && !isSignup) {
+  if (!hasMinted && isFrozen) {
     return (
       <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Signup Closed</h2>
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Season Ended</h2>
         <p className="text-zinc-400">
-          The signup window has ended. Watch the race unfold!
+          This season is frozen. New players cannot join until the next run.
+        </p>
+      </div>
+    )
+  }
+
+  if (!hasMinted && mintCap !== undefined && totalMinted !== undefined && mintedCount >= cap) {
+    return (
+      <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-zinc-200 mb-4">Mint Cap Reached</h2>
+        <p className="text-zinc-400">
+          All Imp slots for this season have been claimed. Watch the race unfold!
         </p>
       </div>
     )

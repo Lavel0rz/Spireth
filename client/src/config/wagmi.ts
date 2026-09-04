@@ -4,6 +4,7 @@ import { injected } from 'wagmi/connectors'
 
 export const config = createConfig({
   chains: [foundry, base, baseSepolia],
+  multiInjectedProviderDiscovery: false,
   connectors: [
     injected(),
   ],
