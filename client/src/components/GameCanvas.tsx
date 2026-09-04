@@ -626,25 +626,6 @@ export function GameCanvas({
           }
           ctx.restore()
           
-          const bb = billboardRef.current
-          if (bb && bb.url) {
-            ctx.font = 'bold 9px sans-serif'
-            ctx.textAlign = 'center'
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
-            const labelText = bb.label.length > 30 ? bb.label.slice(0, 27) + '...' : bb.label
-            const metrics = ctx.measureText(labelText)
-            const boxW = metrics.width + 12
-            const boxH = 13
-            const boxX = CENTER_X - boxW / 2
-            const boxY = billboardY - 8
-            ctx.fillRect(boxX, boxY, boxW, boxH)
-            ctx.fillStyle = '#fde68a'
-            ctx.fillText(labelText, CENTER_X, boxY + 10)
-            ctx.font = '7px sans-serif'
-            ctx.fillStyle = '#a3a3a3'
-            ctx.fillText('↗ External link', CENTER_X, boxY + boxH + 8)
-          }
-          
           ctx.fillStyle = '#fbbf24'
           ctx.fillRect(px, billboardY + 5, pw, 2)
         } else {
@@ -751,6 +732,35 @@ export function GameCanvas({
         if (showDice) {
           drawDiceBadge(ctx, charX, charY, drawW, entity.dice!)
         }
+      }
+
+      const bb = billboardRef.current
+      if (bb && bb.url) {
+        const floor0Y = yForLevel(0, PADDING_TOP, FLOOR_GAP)
+        const floor0Pw = floorWidth(0, MAX_PLATFORM_W, MIN_PLATFORM_W)
+        const billboardLabelY = floor0Y - BILLBOARD_STRIP_H - 8
+        
+        ctx.font = 'bold 11px sans-serif'
+        ctx.textAlign = 'center'
+        const labelText = bb.label.length > 25 ? bb.label.slice(0, 22) + '...' : bb.label
+        const metrics = ctx.measureText(labelText)
+        const boxW = metrics.width + 16
+        const boxH = 18
+        const boxX = CENTER_X - boxW / 2
+        const boxY = billboardLabelY - boxH / 2
+        
+        ctx.fillStyle = 'rgba(120, 53, 15, 0.92)'
+        ctx.fillRect(boxX, boxY, boxW, boxH)
+        ctx.strokeStyle = '#fbbf24'
+        ctx.lineWidth = 2
+        ctx.strokeRect(boxX, boxY, boxW, boxH)
+        
+        ctx.fillStyle = '#fef3c7'
+        ctx.fillText(labelText, CENTER_X, boxY + 13)
+        
+        ctx.font = '8px sans-serif'
+        ctx.fillStyle = '#fcd34d'
+        ctx.fillText('↗ click for link', CENTER_X, boxY + boxH + 10)
       }
 
       rafRef.current = requestAnimationFrame(tick)
