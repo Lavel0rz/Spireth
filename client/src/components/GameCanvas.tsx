@@ -8,7 +8,8 @@ import {
   BOARD_CANVAS_W,
   BOARD_FLOOR_GAP,
   BOARD_PADDING_TOP,
-  DISPLAY_SIZE,
+  DISPLAY_HEIGHT,
+  DISPLAY_WIDTH,
   FLOOR_MAX,
   FLOOR_MIN,
   FRAME_FOOT_Y,
@@ -41,7 +42,6 @@ const PADDING_TOP = BOARD_PADDING_TOP
 const FLOOR_GAP = BOARD_FLOOR_GAP
 const MAX_PLATFORM_W = PLATFORM_MAX_W
 const MIN_PLATFORM_W = PLATFORM_MIN_W
-const FOOT_RATIO = FRAME_FOOT_Y / FRAME_H
 const CANVAS_H = BOARD_CANVAS_H
 const CENTER_X = CANVAS_W / 2
 const HIT_RADIUS_RATIO = 0.65
@@ -88,7 +88,8 @@ function drawTintedFrame(
   frame: PepeFrame,
   dx: number,
   dy: number,
-  size: number,
+  drawW: number,
+  drawH: number,
   tint: [number, number, number],
   greyscale = false,
 ) {
@@ -113,10 +114,11 @@ function drawTintedFrame(
 
   const imgData = offCtx.getImageData(0, 0, FRAME_W, FRAME_H)
   for (let i = 0; i < imgData.data.length; i += 4) {
-    const a = imgData.data[i + 3]
-    if (a === 0) continue
     const lum = imgData.data[i] * 0.3 + imgData.data[i + 1] * 0.59 + imgData.data[i + 2] * 0.11
-    if (lum < 15) continue
+    if (lum < 15) {
+      imgData.data[i + 3] = 0
+      continue
+    }
     if (greyscale) {
       const g = lum * 0.55
       imgData.data[i] = g
@@ -128,6 +130,7 @@ function drawTintedFrame(
       imgData.data[i + 1] = Math.min(255, tint[1] * shade)
       imgData.data[i + 2] = Math.min(255, tint[2] * shade)
     }
+    imgData.data[i + 3] = 255
   }
   offCtx.putImageData(imgData, 0, 0)
 
@@ -145,9 +148,9 @@ function drawTintedFrame(
     [0, -1],
     [0, 1],
   ] as const) {
-    ctx.drawImage(outlineCanvas, 0, 0, FRAME_W, FRAME_H, dx + ox, dy + oy, size, size)
+    ctx.drawImage(outlineCanvas, 0, 0, FRAME_W, FRAME_H, dx + ox, dy + oy, drawW, drawH)
   }
-  ctx.drawImage(offscreen, 0, 0, FRAME_W, FRAME_H, dx, dy, size, size)
+  ctx.drawImage(offscreen, 0, 0, FRAME_W, FRAME_H, dx, dy, drawW, drawH)
 }
 
 function drawPlatformStrip(
@@ -228,15 +231,19 @@ function platformTileForLevel(
   return { tile: sprites.stone, variant: 'stone' }
 }
 
-function charYOnFloor(floorY: number, yOffset: number): number {
+function charYOnFloor(floorY: number, yOffset: number, drawH: number): number {
   const platformTop = floorY - PLATFORM_DRAW_H + 2
-  return platformTop - DISPLAY_SIZE * FOOT_RATIO + yOffset
+  const footOffset = drawH * (FRAME_FOOT_Y / FRAME_H)
+  return platformTop - footOffset + yOffset
 }
 
-function spriteSizeForFloor(peerCount: number): number {
-  return peerCount > CROWDED_FLOOR_THRESHOLD
-    ? DISPLAY_SIZE * CROWDED_SPRITE_SCALE
-    : DISPLAY_SIZE
+function spriteDrawSize(peerCount: number): { drawW: number; drawH: number } {
+  const drawH =
+    peerCount > CROWDED_FLOOR_THRESHOLD
+      ? DISPLAY_HEIGHT * CROWDED_SPRITE_SCALE
+      : DISPLAY_HEIGHT
+  const drawW = drawH * (DISPLAY_WIDTH / DISPLAY_HEIGHT)
+  return { drawW, drawH }
 }
 
 function easeInOutCubic(t: number): number {
@@ -253,14 +260,14 @@ function drawIdBadge(
   ctx: CanvasRenderingContext2D,
   charX: number,
   charY: number,
-  spriteSize: number,
+  drawW: number,
   impId: string,
   owner: string,
   isSelected: boolean,
   isDead: boolean,
 ) {
   const label = isSelected ? `#${impId} ${shortAddress(owner)}` : `#${impId}`
-  const labelX = charX + spriteSize / 2
+  const labelX = charX + drawW / 2
   const labelY = charY - 3
 
   ctx.font = '8px monospace'
@@ -594,13 +601,13 @@ export function GameCanvas({
       for (const entity of sorted) {
         const floorHeight = Math.round(entity.displayHeight)
         const peerCount = floorPeerCounts.get(floorHeight) ?? 1
-        const spriteSize = spriteSizeForFloor(peerCount)
+        const { drawW, drawH } = spriteDrawSize(peerCount)
 
         const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
         const px = CENTER_X - pw / 2
         const floorY = yForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
-        const charX = px + entity.floorX * pw - spriteSize / 2
-        const charY = charYOnFloor(floorY, entity.yOffset)
+        const charX = px + entity.floorX * pw - drawW / 2
+        const charY = charYOnFloor(floorY, entity.yOffset, drawH)
 
         let pepeFrame: PepeFrame
         if (entity.isDead) {
@@ -623,7 +630,8 @@ export function GameCanvas({
           pepeFrame,
           charX,
           charY,
-          spriteSize,
+          drawW,
+          drawH,
           entity.tint,
           entity.isDead,
         )
@@ -634,7 +642,7 @@ export function GameCanvas({
           ctx.lineWidth = 1
           ctx.shadowColor = 'rgba(167, 139, 250, 0.7)'
           ctx.shadowBlur = 6
-          ctx.strokeRect(charX + 0.5, charY + 0.5, spriteSize - 1, spriteSize - 1)
+          ctx.strokeRect(charX + 0.5, charY + 0.5, drawW - 1, drawH - 1)
           ctx.shadowBlur = 0
         }
 
@@ -642,7 +650,7 @@ export function GameCanvas({
           ctx,
           charX,
           charY,
-          spriteSize,
+          drawW,
           entity.impId,
           entity.owner,
           entity.isSelected,
@@ -712,17 +720,18 @@ export function GameCanvas({
       const peerCount = [...entitiesRef.current.values()].filter(
         (entry) => Math.round(entry.displayHeight) === floorHeight,
       ).length
-      const spriteSize = spriteSizeForFloor(peerCount)
+      const { drawW, drawH } = spriteDrawSize(peerCount)
 
       const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
       const px = CENTER_X - pw / 2
       const floorY = yForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
       const charX = px + entity.floorX * pw
-      const charY = charYOnFloor(floorY, 0) + spriteSize / 2
+      const charY = charYOnFloor(floorY, 0, drawH) + drawH / 2
       const dx = x - charX
       const dy = y - charY
+      const hitR = Math.min(drawW, drawH) * HIT_RADIUS_RATIO
       const dist = Math.sqrt(dx * dx + dy * dy)
-      if (dist < spriteSize * HIT_RADIUS_RATIO && (!closest || dist < closest.dist)) {
+      if (dist < hitR && (!closest || dist < closest.dist)) {
         closest = { id: entity.impId, dist, floor: floorHeight }
       }
     }
