@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useAccount } from 'wagmi'
 import { WalletConnect } from '@/components/WalletConnect'
 import { SeasonInfo } from '@/components/SeasonInfo'
+import { Leaderboard } from '@/components/Leaderboard'
 import { Board } from '@/components/Board'
 import { ImpPanel } from '@/components/ImpPanel'
 import { useHasMinted, useOwnedImpId } from '@/hooks/useSpireth'
@@ -49,8 +50,8 @@ export default function Home() {
                   Climb the Ethereum Rhombus
                 </h2>
                 <p className="text-zinc-400 max-w-xl mx-auto">
-                  Roll the dice daily to move your Imp up or down. First to reach +25 (Summit) or -25 (Abyss) 
-                  rings the bell and freezes the season. Top 50% of living Imps split the prize pool.
+                  Roll the dice daily to move your Pepe up or down. First to reach +25 (Summit) or -25 (Abyss) 
+                  rings the bell and freezes the season. Top 50% of living Pepes split the prize pool.
                 </p>
               </div>
               
@@ -86,6 +87,7 @@ export default function Home() {
 
           <div className="space-y-6">
             <SeasonInfo />
+            <Leaderboard />
             <ImpPanel impId={selectedImpId} />
             
             <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-6">

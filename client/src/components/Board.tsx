@@ -103,7 +103,7 @@ export function Board({
           <span>Selected</span>
         </div>
         <div className="flex items-center gap-1">
-          <span className="text-zinc-400">Click a character to select</span>
+          <span className="text-zinc-400">Click a Pepe to select</span>
         </div>
       </div>
     </div>
