@@ -45,6 +45,14 @@ export interface Top10Entry {
   payoutUsd: number
   netUsd: number
   isWinner: boolean
+  rank?: number
+}
+
+export interface ProjectedPayout {
+  rank: number
+  livingCount: number
+  paidCount: number
+  payoutUsd: number
 }
 
 export interface SimSummary {
@@ -121,6 +129,61 @@ function generateSimImps(): ImpData[] {
   }))
 }
 
+export interface LivingImpInfo {
+  id: string
+  height: number
+  reachedAt: number
+}
+
+export function projectPayouts(
+  living: LivingImpInfo[],
+  poolUsd: number,
+): Map<string, ProjectedPayout> {
+  const result = new Map<string, ProjectedPayout>()
+
+  if (living.length === 0) {
+    return result
+  }
+
+  const ranked = [...living].sort((a, b) => {
+    const absA = Math.abs(a.height)
+    const absB = Math.abs(b.height)
+    if (absB !== absA) return absB - absA
+    if (a.reachedAt !== b.reachedAt) return a.reachedAt - b.reachedAt
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  })
+
+  const paidCountFromPct = Math.ceil(ranked.length * (PAID_TOP_PCT / 100))
+  const paidCount =
+    ranked.length >= PAID_MIN_COUNT
+      ? Math.max(PAID_MIN_COUNT, paidCountFromPct)
+      : ranked.length
+
+  let sumWeights = 0
+  for (let i = 0; i < paidCount; i++) {
+    const weight = (paidCount - i) * (paidCount - i)
+    sumWeights += weight
+  }
+
+  for (let i = 0; i < ranked.length; i++) {
+    const imp = ranked[i]
+    const rank = i + 1
+    let payoutUsd = 0
+    if (i < paidCount && sumWeights > 0) {
+      const weight = (paidCount - i) * (paidCount - i)
+      payoutUsd = Math.round((poolUsd * weight) / sumWeights)
+    }
+    result.set(imp.id, {
+      rank,
+      livingCount: ranked.length,
+      paidCount,
+      payoutUsd,
+    })
+  }
+
+  return result
+}
+
 function buildSummary(
   winnerId: bigint,
   outcome: SimOutcome,
@@ -134,6 +197,7 @@ function buildSummary(
   imps: ImpData[],
   rollCounts: Map<string, number>,
   heights: Map<string, number>,
+  heightReachedAt: Map<string, number>,
 ): SimSummary {
   // Full prize pool distributed to top 50% of living by |floor| rank with quadratic weights.
   // No bell bonus — tip winner only gets their rank share like everyone else.
@@ -146,11 +210,13 @@ function buildSummary(
     .map((imp) => ({
       imp,
       height: heights.get(imp.id.toString()) ?? imp.height,
+      reachedAt: heightReachedAt.get(imp.id.toString()) ?? 0,
     }))
     .sort((a, b) => {
       const absA = Math.abs(a.height)
       const absB = Math.abs(b.height)
       if (absB !== absA) return absB - absA
+      if (a.reachedAt !== b.reachedAt) return a.reachedAt - b.reachedAt
       return a.imp.id < b.imp.id ? -1 : a.imp.id > b.imp.id ? 1 : 0
     })
 
@@ -178,6 +244,11 @@ function buildSummary(
     rankPayouts.set(paidRanks[i].imp.id.toString(), share)
   }
 
+  const rankMap = new Map<string, number>()
+  rankedLiving.forEach((r, i) => {
+    rankMap.set(r.imp.id.toString(), i + 1)
+  })
+
   const entries: Top10Entry[] = imps.map((imp) => {
     const key = imp.id.toString()
     const impRolls = rollCounts.get(key) ?? 0
@@ -187,7 +258,6 @@ function buildSummary(
     const isLiving = !imp.isDead
     let payoutUsd = 0
     if (isLiving) {
-      // Winner gets rank share only — no separate bell bonus
       payoutUsd = rankPayouts.get(key) ?? 0
     }
     return {
@@ -197,6 +267,7 @@ function buildSummary(
       payoutUsd: Math.round(payoutUsd),
       netUsd: Math.round(payoutUsd - spentUsd),
       isWinner,
+      rank: isLiving ? rankMap.get(key) : undefined,
     }
   })
 
@@ -264,6 +335,8 @@ export function useSimulateCompetition() {
   })
 
   const heightsRef = useRef<Map<string, number>>(new Map())
+  const heightReachedAtRef = useRef<Map<string, number>>(new Map())
+  const arrivalSeqRef = useRef(0)
   const impsRef = useRef<ImpData[]>([])
   const pendingTimeoutsRef = useRef<number[]>([])
   const jumpEndTimesRef = useRef<Map<string, number>>(new Map())
@@ -331,6 +404,7 @@ export function useSimulateCompetition() {
           impsRef.current,
           rollCountsRef.current,
           heightsRef.current,
+          heightReachedAtRef.current,
         ),
       )
     },
@@ -364,6 +438,10 @@ export function useSimulateCompetition() {
         const newHeight = clampFloor(currentHeight + dice)
 
         heightsRef.current.set(key, newHeight)
+        if (newHeight !== currentHeight) {
+          arrivalSeqRef.current += 1
+          heightReachedAtRef.current.set(key, arrivalSeqRef.current)
+        }
         recordRollEconomics(key)
 
         const jumpMs = jumpDurationMs(currentHeight, newHeight)
@@ -405,6 +483,8 @@ export function useSimulateCompetition() {
       tickIntervalRef.current = null
     }
     heightsRef.current.clear()
+    heightReachedAtRef.current.clear()
+    arrivalSeqRef.current = 0
     jumpEndTimesRef.current.clear()
     rollCountsRef.current.clear()
     rollsRef.current = 0
@@ -428,6 +508,8 @@ export function useSimulateCompetition() {
     resetState()
     const imps = generateSimImps()
     heightsRef.current = new Map(imps.map((imp) => [imp.id.toString(), imp.height]))
+    heightReachedAtRef.current = new Map(imps.map((imp) => [imp.id.toString(), 0]))
+    arrivalSeqRef.current = 0
     impsRef.current = imps
     startedAtRef.current = Date.now()
     setSimImps(imps)
@@ -515,6 +597,36 @@ export function useSimulateCompetition() {
 
   const simVisible = active || simImps.length > 0
 
+  const getProjectedPayout = useCallback(
+    (impId: bigint): ProjectedPayout | null => {
+      if (!simVisible) return null
+
+      const key = impId.toString()
+      const imp = impsRef.current.find((i) => i.id === impId)
+      if (!imp || imp.isDead) return null
+
+      const living: LivingImpInfo[] = impsRef.current
+        .filter((i) => !i.isDead)
+        .map((i) => ({
+          id: i.id.toString(),
+          height: heightsRef.current.get(i.id.toString()) ?? i.height,
+          reachedAt: heightReachedAtRef.current.get(i.id.toString()) ?? 0,
+        }))
+
+      const payouts = projectPayouts(living, poolUsdRef.current)
+      return payouts.get(key) ?? null
+    },
+    [simVisible],
+  )
+
+  const getHeightsSnapshot = useCallback((): Map<string, number> => {
+    return new Map(heightsRef.current)
+  }, [])
+
+  const getHeightReachedAtSnapshot = useCallback((): Map<string, number> => {
+    return new Map(heightReachedAtRef.current)
+  }, [])
+
   return {
     active,
     simVisible,
@@ -526,5 +638,8 @@ export function useSimulateCompetition() {
     toggle,
     dismissSummary,
     runAgain,
+    getProjectedPayout,
+    getHeightsSnapshot,
+    getHeightReachedAtSnapshot,
   }
 }
