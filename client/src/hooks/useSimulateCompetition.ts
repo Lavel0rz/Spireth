@@ -30,10 +30,11 @@ export const POOL_SHARE_USD = 4
 export const DEV_SHARE_USD = 1
 export const PAID_TOP_PCT = 50
 export const PAID_MIN_COUNT = 10
-// Aavegotchi-style descending curve — rank 1 >> rank 10 >> long tail.
+// Aavegotchi-style descending curve — rank 1 > rank 10 > long tail.
 // weight = 1/(rank)^ZIPF_EXPONENT where rank is 1-indexed.
 // Independent of paidCount size (unlike (n-i)^2).
-export const ZIPF_EXPONENT = 2
+// α=1 → rank1 ≈ 1/H_n ≈ ~18–22% of pool for typical paid counts; α=2 was ~61% (too heavy).
+export const ZIPF_EXPONENT = 1
 
 export type SimOutcome = 'summit' | 'abyss'
 
