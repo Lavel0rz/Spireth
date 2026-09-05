@@ -108,6 +108,22 @@ export const PLATFORM_STRIP_SOURCES = {
 
 export type Direction = 'down' | 'up' | 'left' | 'right'
 
+/** Face into the abyss below floor 0; keep climb/jump/side facing on positive floors. */
+export function pepeBoardFacing(
+  displayHeight: number,
+  animState: PepeAnimState,
+  walkFacing: Direction,
+  jumpFrom?: number,
+  jumpTo?: number,
+): Direction {
+  if (animState === 'jump' && jumpFrom !== undefined && jumpTo !== undefined) {
+    if (jumpTo < jumpFrom) return 'down'
+    if (jumpTo > jumpFrom) return 'up'
+  }
+  if (displayHeight < 0 && animState === 'walk') return 'down'
+  return walkFacing
+}
+
 export interface ImpData {
   id: bigint
   height: number

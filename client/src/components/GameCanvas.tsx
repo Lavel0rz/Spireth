@@ -24,6 +24,7 @@ import {
   floorHalfWidth,
   floorWidth,
   laneBounds,
+  pepeBoardFacing,
   resolvePepeFrame,
   shortAddress,
   jumpDurationMs,
@@ -472,7 +473,7 @@ export function GameCanvas({
           displayHeight: imp.height,
           floorX: lane.center,
           direction: parseInt(key, 10) % 2 === 0 ? 1 : -1,
-          facing: parseInt(key, 10) % 2 === 0 ? 'right' : 'left',
+          facing: imp.height < 0 ? 'down' : parseInt(key, 10) % 2 === 0 ? 'right' : 'left',
           animState: imp.isDead ? 'dead' : 'walk',
           frame: 0,
           frameTimer: 0,
@@ -510,6 +511,7 @@ export function GameCanvas({
             impsRef.current.filter((i) => i.height === imp.height).map((i) => i.id.toString()),
           )
           existing.floorX = newLane.center
+          if (imp.height < 0) existing.facing = 'down'
         } else if (existing.isDead !== imp.isDead) {
           existing.isDead = imp.isDead
           existing.deadSince = imp.isDead ? Date.now() : 0
@@ -677,7 +679,7 @@ export function GameCanvas({
             entity.height = entity.jumpTo
             entity.animState = 'walk'
             entity.yOffset = 0
-            entity.facing = entity.direction > 0 ? 'right' : 'left'
+            entity.facing = entity.jumpTo < 0 ? 'down' : entity.direction > 0 ? 'right' : 'left'
             const landedPeers = floorPeerCache.get(entity.jumpTo) ?? []
             const landedLane = laneBounds(entity.impId, landedPeers)
             entity.floorX = landedLane.center
@@ -796,9 +798,16 @@ export function GameCanvas({
           const charX = px + entity.floorX * pw - drawW / 2
           const charY = charYOnFloor(floorY, entity.yOffset, drawH)
 
-          const pepeFrame = resolvePepeFrame(
+          const boardFacing = pepeBoardFacing(
+            entity.displayHeight,
             entity.animState,
             entity.facing,
+            entity.jumpFrom,
+            entity.jumpTo,
+          )
+          const pepeFrame = resolvePepeFrame(
+            entity.animState,
+            boardFacing,
             entity.frame,
             entity.isDead,
           )
