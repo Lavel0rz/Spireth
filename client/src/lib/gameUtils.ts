@@ -89,6 +89,12 @@ export const PLATFORM_TILE_SRC_Y = 64
 export const PLATFORM_TILE_SRC_H = 16
 export const PLATFORM_DRAW_H = 14
 
+/** Floor-0 billboard strip height (taller than PLATFORM_DRAW_H for click target + label). */
+export const BILLBOARD_PLATFORM_H = 20
+
+/** Pixels the billboard strip extends below the floor-0 baseline. */
+export const BILLBOARD_BELOW_FLOOR0_PX = BILLBOARD_PLATFORM_H - (PLATFORM_DRAW_H - 2)
+
 /** Rhombus platform width at center (level 0) and tips (±50). */
 export const PLATFORM_MAX_W = 360
 export const PLATFORM_MIN_W = 20
@@ -101,6 +107,22 @@ export const PLATFORM_STRIP_SOURCES = {
 } as const
 
 export type Direction = 'down' | 'up' | 'left' | 'right'
+
+/** Face into the abyss below floor 0; keep climb/jump/side facing on positive floors. */
+export function pepeBoardFacing(
+  displayHeight: number,
+  animState: PepeAnimState,
+  walkFacing: Direction,
+  jumpFrom?: number,
+  jumpTo?: number,
+): Direction {
+  if (animState === 'jump' && jumpFrom !== undefined && jumpTo !== undefined) {
+    if (jumpTo < jumpFrom) return 'down'
+    if (jumpTo > jumpFrom) return 'up'
+  }
+  if (displayHeight < 0 && animState === 'walk') return 'down'
+  return walkFacing
+}
 
 export interface ImpData {
   id: bigint
@@ -124,8 +146,24 @@ export const BOARD_CANVAS_W = 440
 export const BOARD_PADDING_TOP = 28
 /** Vertical spacing between floors — tuned so 101 levels fit fullscreen when scaled. */
 export const BOARD_FLOOR_GAP = 6
+
+/**
+ * Push negative floors down so platforms and pepes clear the floor-0 billboard strip.
+ * Derived from billboard bottom vs unadjusted floor -1 platform top + sprite foot offset.
+ */
+export function negativeFloorBillboardYOffset(floorGap: number): number {
+  const floor1PlatformTopRelFloor0 = floorGap - (PLATFORM_DRAW_H - 2)
+  const footOffset = DISPLAY_HEIGHT * (FRAME_FOOT_Y / FRAME_H)
+  return Math.ceil(BILLBOARD_BELOW_FLOOR0_PX + footOffset - floor1PlatformTopRelFloor0)
+}
+
+export const NEGATIVE_FLOOR_BILLBOARD_Y_OFFSET = negativeFloorBillboardYOffset(BOARD_FLOOR_GAP)
+
 export const BOARD_CANVAS_H =
-  BOARD_PADDING_TOP + (FLOOR_MAX - FLOOR_MIN) * BOARD_FLOOR_GAP + 40
+  BOARD_PADDING_TOP +
+  (FLOOR_MAX - FLOOR_MIN) * BOARD_FLOOR_GAP +
+  NEGATIVE_FLOOR_BILLBOARD_Y_OFFSET +
+  40
 
 /** Show summit/abyss/0 and every 10th floor so labels stay readable. */
 export function shouldShowFloorLabel(level: number): boolean {
@@ -138,7 +176,7 @@ export function shouldShowFloorLabel(level: number): boolean {
 }
 
 export const RHOMBUS_SUMMIT_Y = BOARD_PADDING_TOP
-export const RHOMBUS_ABYSS_Y = yForLevel(FLOOR_MIN, BOARD_PADDING_TOP, BOARD_FLOOR_GAP)
+export const RHOMBUS_ABYSS_Y = boardYForLevel(FLOOR_MIN, BOARD_PADDING_TOP, BOARD_FLOOR_GAP)
 
 export function rhombusYFraction(y: number): number {
   return y / BOARD_CANVAS_H
@@ -146,6 +184,18 @@ export function rhombusYFraction(y: number): number {
 
 export function yForLevel(level: number, paddingTop: number, floorGap: number): number {
   return paddingTop + (FLOOR_MAX - level) * floorGap
+}
+
+/** Floor Y on the board canvas, accounting for the floor-0 billboard strip. */
+export function boardYForLevel(
+  level: number,
+  paddingTop: number = BOARD_PADDING_TOP,
+  floorGap: number = BOARD_FLOOR_GAP,
+): number {
+  const y = yForLevel(level, paddingTop, floorGap)
+  if (level >= 0) return y
+  const ramp = Math.min(1, -level)
+  return y + negativeFloorBillboardYOffset(floorGap) * ramp
 }
 
 function hslToRgb(h: number, s: number, l: number): [number, number, number] {
