@@ -15,9 +15,9 @@ export const ROLL_USD = 5
 export const POOL_SHARE_USD = 4
 export const DEV_SHARE_USD = 1
 export const BELL_BONUS_PCT = 10
-export const PAID_TOP_PCT = 10
+export const PAID_TOP_PCT = 20
 export const PAID_MIN_COUNT = 10
-export const GEOMETRIC_DECAY = 0.82
+export const GEOMETRIC_DECAY = 0.92
 
 export type SimOutcome = 'summit' | 'abyss'
 
@@ -120,8 +120,8 @@ function buildSummary(
       return a.imp.id < b.imp.id ? -1 : a.imp.id > b.imp.id ? 1 : 0
     })
 
-  // Pay top 10% of living (min 10 if enough living, else all living).
-  // Geometric decay 0.82^i ensures visible rank differentiation: rank 1 > rank 5 > rank 10.
+  // Pay top 20% of living (min 10 if enough living, else all living).
+  // Geometric decay 0.92^i (softer) ensures more of the paid set stay profitable while still differentiating ranks.
   const paidCountFromPct = Math.ceil(rankedLiving.length * (PAID_TOP_PCT / 100))
   const paidCount =
     rankedLiving.length >= PAID_MIN_COUNT
