@@ -28,10 +28,8 @@ const SIM_MIN_LIVING = 50
 export const ROLL_USD = 5
 export const POOL_SHARE_USD = 4
 export const DEV_SHARE_USD = 1
-export const BELL_BONUS_PCT = 10
-export const PAID_TOP_PCT = 20
+export const PAID_TOP_PCT = 50
 export const PAID_MIN_COUNT = 10
-export const GEOMETRIC_DECAY = 0.92
 
 export type SimOutcome = 'summit' | 'abyss'
 
@@ -132,8 +130,10 @@ function buildSummary(
   rollCounts: Map<string, number>,
   heights: Map<string, number>,
 ): SimSummary {
-  const bellBonusUsd = Math.round(poolUsd * (BELL_BONUS_PCT / 100))
-  const remainingPoolUsd = poolUsd - bellBonusUsd
+  // Full prize pool distributed to top 50% of living by |floor| rank with quadratic weights.
+  // No bell bonus — tip winner only gets their rank share like everyone else.
+  const bellBonusUsd = 0
+  const remainingPoolUsd = poolUsd
 
   const livingImps = imps.filter((imp) => !imp.isDead)
 
@@ -149,8 +149,8 @@ function buildSummary(
       return a.imp.id < b.imp.id ? -1 : a.imp.id > b.imp.id ? 1 : 0
     })
 
-  // Pay top 20% of living (min 10 if enough living, else all living).
-  // Geometric decay 0.92^i (softer) ensures more of the paid set stay profitable while still differentiating ranks.
+  // Pay top 50% of living (min 10 if enough living, else all living).
+  // Quadratic weights (paidCount - i)^2 create a top-heavy distribution.
   const paidCountFromPct = Math.ceil(rankedLiving.length * (PAID_TOP_PCT / 100))
   const paidCount =
     rankedLiving.length >= PAID_MIN_COUNT
@@ -160,12 +160,13 @@ function buildSummary(
 
   let sumWeights = 0
   for (let i = 0; i < paidCount; i++) {
-    sumWeights += Math.pow(GEOMETRIC_DECAY, i)
+    const weight = (paidCount - i) * (paidCount - i)
+    sumWeights += weight
   }
 
   const rankPayouts = new Map<string, number>()
   for (let i = 0; i < paidCount; i++) {
-    const weight = Math.pow(GEOMETRIC_DECAY, i)
+    const weight = (paidCount - i) * (paidCount - i)
     const share = sumWeights > 0 ? (remainingPoolUsd * weight) / sumWeights : 0
     rankPayouts.set(paidRanks[i].imp.id.toString(), share)
   }
@@ -179,8 +180,8 @@ function buildSummary(
     const isLiving = !imp.isDead
     let payoutUsd = 0
     if (isLiving) {
-      const rankShare = rankPayouts.get(key) ?? 0
-      payoutUsd = rankShare + (isWinner ? bellBonusUsd : 0)
+      // Winner gets rank share only — no separate bell bonus
+      payoutUsd = rankPayouts.get(key) ?? 0
     }
     return {
       id: imp.id,
