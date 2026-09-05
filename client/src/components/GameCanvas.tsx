@@ -24,7 +24,7 @@ import {
   floorHalfWidth,
   floorWidth,
   laneBounds,
-  pepeBoardFacing,
+  pepeAbyssInverted,
   resolvePepeFrame,
   shortAddress,
   jumpDurationMs,
@@ -211,6 +211,7 @@ function drawTintedFrame(
   tint: [number, number, number],
   greyscale = false,
   noOutline = false,
+  flipY = false,
 ) {
   const offCtx = offscreen.getContext('2d')
   const outlineCtx = outlineCanvas.getContext('2d')
@@ -229,7 +230,17 @@ function drawTintedFrame(
   }
 
   ctx.imageSmoothingEnabled = false
-  ctx.drawImage(cachedFrame, 0, 0, FRAME_W + 2, FRAME_H + 2, dx - 1, dy - 1, drawW + 2, drawH + 2)
+  if (flipY) {
+    const footOffset = drawH * (FRAME_FOOT_Y / FRAME_H)
+    const footY = dy + footOffset
+    ctx.save()
+    ctx.translate(dx + drawW / 2, footY)
+    ctx.scale(1, -1)
+    ctx.drawImage(cachedFrame, -drawW / 2 - 1, -drawH - 1, drawW + 2, drawH + 2)
+    ctx.restore()
+  } else {
+    ctx.drawImage(cachedFrame, 0, 0, FRAME_W + 2, FRAME_H + 2, dx - 1, dy - 1, drawW + 2, drawH + 2)
+  }
 }
 
 function drawPlatformStrip(
@@ -316,6 +327,10 @@ function charYOnFloor(floorY: number, yOffset: number, drawH: number): number {
   return platformTop - footOffset + yOffset
 }
 
+function spriteFootY(charY: number, drawH: number): number {
+  return charY + drawH * (FRAME_FOOT_Y / FRAME_H)
+}
+
 function spriteDrawSize(
   peerCount: number,
   totalEntities: number,
@@ -339,7 +354,7 @@ function easeInOutCubic(t: number): number {
 function drawIdBadge(
   ctx: CanvasRenderingContext2D,
   charX: number,
-  charY: number,
+  labelY: number,
   drawW: number,
   impId: string,
   owner: string,
@@ -348,7 +363,6 @@ function drawIdBadge(
 ) {
   const label = isSelected ? `#${impId} ${shortAddress(owner)}` : `#${impId}`
   const labelX = charX + drawW / 2
-  const labelY = charY - 3
 
   const font = '8px monospace'
   const textWidth = getCachedTextWidth(ctx, label, font)
@@ -376,13 +390,12 @@ function drawIdBadge(
 function drawDiceBadge(
   ctx: CanvasRenderingContext2D,
   charX: number,
-  charY: number,
+  labelY: number,
   drawW: number,
   dice: number,
 ) {
   const label = dice > 0 ? `+${dice}` : `${dice}`
   const labelX = charX + drawW / 2
-  const labelY = charY - 14
 
   const font = 'bold 7px monospace'
   const textWidth = getCachedTextWidth(ctx, label, font)
@@ -473,7 +486,7 @@ export function GameCanvas({
           displayHeight: imp.height,
           floorX: lane.center,
           direction: parseInt(key, 10) % 2 === 0 ? 1 : -1,
-          facing: imp.height < 0 ? 'down' : parseInt(key, 10) % 2 === 0 ? 'right' : 'left',
+          facing: parseInt(key, 10) % 2 === 0 ? 'right' : 'left',
           animState: imp.isDead ? 'dead' : 'walk',
           frame: 0,
           frameTimer: 0,
@@ -511,7 +524,6 @@ export function GameCanvas({
             impsRef.current.filter((i) => i.height === imp.height).map((i) => i.id.toString()),
           )
           existing.floorX = newLane.center
-          if (imp.height < 0) existing.facing = 'down'
         } else if (existing.isDead !== imp.isDead) {
           existing.isDead = imp.isDead
           existing.deadSince = imp.isDead ? Date.now() : 0
@@ -679,7 +691,7 @@ export function GameCanvas({
             entity.height = entity.jumpTo
             entity.animState = 'walk'
             entity.yOffset = 0
-            entity.facing = entity.jumpTo < 0 ? 'down' : entity.direction > 0 ? 'right' : 'left'
+            entity.facing = entity.direction > 0 ? 'right' : 'left'
             const landedPeers = floorPeerCache.get(entity.jumpTo) ?? []
             const landedLane = laneBounds(entity.impId, landedPeers)
             entity.floorX = landedLane.center
@@ -797,17 +809,11 @@ export function GameCanvas({
           const floorY = boardYForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
           const charX = px + entity.floorX * pw - drawW / 2
           const charY = charYOnFloor(floorY, entity.yOffset, drawH)
-
-          const boardFacing = pepeBoardFacing(
-            entity.displayHeight,
-            entity.animState,
-            entity.facing,
-            entity.jumpFrom,
-            entity.jumpTo,
-          )
+          const inverted = pepeAbyssInverted(entity.displayHeight, entity.animState)
+          const footY = spriteFootY(charY, drawH)
           const pepeFrame = resolvePepeFrame(
             entity.animState,
-            boardFacing,
+            entity.facing,
             entity.frame,
             entity.isDead,
           )
@@ -826,6 +832,7 @@ export function GameCanvas({
             entity.tint,
             entity.isDead,
             useNoOutline,
+            inverted,
           )
 
           if (entity.isSelected) {
@@ -834,16 +841,18 @@ export function GameCanvas({
             ctx.lineWidth = 1
             ctx.shadowColor = 'rgba(167, 139, 250, 0.7)'
             ctx.shadowBlur = 6
-            ctx.strokeRect(charX + 0.5, charY + 0.5, drawW - 1, drawH - 1)
+            const selY = inverted ? footY : charY
+            ctx.strokeRect(charX + 0.5, selY + 0.5, drawW - 1, drawH - 1)
             ctx.shadowBlur = 0
           }
 
+          const idLabelY = inverted ? footY + drawH + 4 : charY - 3
           const showIdBadge = entity.isSelected || !denseRender
           if (showIdBadge) {
             drawIdBadge(
               ctx,
               charX,
-              charY,
+              idLabelY,
               drawW,
               entity.impId,
               entity.owner,
@@ -857,7 +866,8 @@ export function GameCanvas({
             (entity.animState === 'jump' || now < entity.diceShowUntil)
           const showDiceBadge = showDice && (entity.isSelected || !denseRender)
           if (showDiceBadge) {
-            drawDiceBadge(ctx, charX, charY, drawW, entity.dice!)
+            const diceLabelY = inverted ? footY + drawH + 14 : charY - 14
+            drawDiceBadge(ctx, charX, diceLabelY, drawW, entity.dice!)
           }
         }
       }
@@ -962,10 +972,13 @@ export function GameCanvas({
       const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
       const px = CENTER_X - pw / 2
       const floorY = boardYForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
+      const charY = charYOnFloor(floorY, 0, drawH)
+      const inverted = pepeAbyssInverted(entity.displayHeight, entity.animState)
+      const footY = spriteFootY(charY, drawH)
       const charX = px + entity.floorX * pw
-      const charY = charYOnFloor(floorY, 0, drawH) + drawH / 2
+      const charCenterY = inverted ? footY + drawH / 2 : charY + drawH / 2
       const dx = x - charX
-      const dy = y - charY
+      const dy = y - charCenterY
       const hitR = Math.min(drawW, drawH) * HIT_RADIUS_RATIO
       const dist = Math.sqrt(dx * dx + dy * dy)
       if (dist < hitR && (!closest || dist < closest.dist)) {

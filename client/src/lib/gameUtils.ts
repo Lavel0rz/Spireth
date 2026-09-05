@@ -108,20 +108,16 @@ export const PLATFORM_STRIP_SOURCES = {
 
 export type Direction = 'down' | 'up' | 'left' | 'right'
 
-/** Face into the abyss below floor 0; keep climb/jump/side facing on positive floors. */
-export function pepeBoardFacing(
+/** Small gap between billboard bottom and floor -1 platform (px). */
+export const BILLBOARD_ABYSS_PLATFORM_GAP = 2
+
+/** True when the Pepe should render upside-down (negative floor / abyss). */
+export function pepeAbyssInverted(
   displayHeight: number,
   animState: PepeAnimState,
-  walkFacing: Direction,
-  jumpFrom?: number,
-  jumpTo?: number,
-): Direction {
-  if (animState === 'jump' && jumpFrom !== undefined && jumpTo !== undefined) {
-    if (jumpTo < jumpFrom) return 'down'
-    if (jumpTo > jumpFrom) return 'up'
-  }
-  if (displayHeight < 0 && animState === 'walk') return 'down'
-  return walkFacing
+): boolean {
+  if (animState === 'dead') return displayHeight < 0
+  return displayHeight < 0
 }
 
 export interface ImpData {
@@ -148,13 +144,14 @@ export const BOARD_PADDING_TOP = 28
 export const BOARD_FLOOR_GAP = 6
 
 /**
- * Push negative floors down so platforms and pepes clear the floor-0 billboard strip.
- * Derived from billboard bottom vs unadjusted floor -1 platform top + sprite foot offset.
+ * Push negative floors down so the floor -1 platform sits just below the billboard.
+ * Abyss Pepes are vertically flipped so their bodies hang down — no extra sprite clearance.
  */
 export function negativeFloorBillboardYOffset(floorGap: number): number {
   const floor1PlatformTopRelFloor0 = floorGap - (PLATFORM_DRAW_H - 2)
-  const footOffset = DISPLAY_HEIGHT * (FRAME_FOOT_Y / FRAME_H)
-  return Math.ceil(BILLBOARD_BELOW_FLOOR0_PX + footOffset - floor1PlatformTopRelFloor0)
+  return Math.ceil(
+    BILLBOARD_BELOW_FLOOR0_PX - floor1PlatformTopRelFloor0 + BILLBOARD_ABYSS_PLATFORM_GAP,
+  )
 }
 
 export const NEGATIVE_FLOOR_BILLBOARD_Y_OFFSET = negativeFloorBillboardYOffset(BOARD_FLOOR_GAP)
