@@ -8,6 +8,7 @@ import {
   BOARD_CANVAS_W,
   BOARD_FLOOR_GAP,
   BOARD_PADDING_TOP,
+  BILLBOARD_PLATFORM_H,
   DISPLAY_HEIGHT,
   DISPLAY_WIDTH,
   FLOOR_MAX,
@@ -28,7 +29,7 @@ import {
   jumpDurationMs,
   shouldShowFloorLabel,
   tintFromAddress,
-  yForLevel,
+  boardYForLevel,
   type ImpData,
   type PepeFrame,
 } from '@/lib/gameUtils'
@@ -48,7 +49,6 @@ const CROWDED_SPRITE_SCALE = 0.88
 const VERY_LARGE_SPRITE_SCALE = 0.78
 const JUMP_ARC_HEIGHT = 7
 const COMMIT_BOUNCE = { dip: 1, peak: -5, settle: -2 } as const
-const BILLBOARD_PLATFORM_H = 20
 const MAX_DRAW_PER_FLOOR = 8
 const DEAD_SKIP_MS = 1000
 
@@ -271,9 +271,9 @@ function drawPlatformStrip(
 }
 
 function drawRhombusOutline(ctx: CanvasRenderingContext2D) {
-  const summitY = yForLevel(FLOOR_MAX, PADDING_TOP, FLOOR_GAP)
-  const abyssY = yForLevel(FLOOR_MIN, PADDING_TOP, FLOOR_GAP)
-  const midY = yForLevel(0, PADDING_TOP, FLOOR_GAP)
+  const summitY = boardYForLevel(FLOOR_MAX, PADDING_TOP, FLOOR_GAP)
+  const abyssY = boardYForLevel(FLOOR_MIN, PADDING_TOP, FLOOR_GAP)
+  const midY = boardYForLevel(0, PADDING_TOP, FLOOR_GAP)
 
   const summitHalf = floorHalfWidth(FLOOR_MAX, MAX_PLATFORM_W, MIN_PLATFORM_W)
   const abyssHalf = floorHalfWidth(FLOOR_MIN, MAX_PLATFORM_W, MIN_PLATFORM_W)
@@ -694,7 +694,7 @@ export function GameCanvas({
       drawRhombusOutline(ctx)
 
       for (let level = FLOOR_MAX; level >= FLOOR_MIN; level--) {
-        const y = yForLevel(level, PADDING_TOP, FLOOR_GAP)
+        const y = boardYForLevel(level, PADDING_TOP, FLOOR_GAP)
         const pw = floorWidth(level, MAX_PLATFORM_W, MIN_PLATFORM_W)
         const px = CENTER_X - pw / 2
         const isCenter = level === 0
@@ -774,83 +774,90 @@ export function GameCanvas({
 
       const floorDrawCounts = new Map<number, number>()
 
-      for (const entity of sorted) {
-        const floorHeight = Math.round(entity.displayHeight)
+      const drawEntities = (belowBillboard: boolean) => {
+        for (const entity of sorted) {
+          const isBelowBillboard = entity.displayHeight < 0
+          if (isBelowBillboard !== belowBillboard) continue
 
-        if (denseRender && !entity.isSelected) {
-          const drawn = floorDrawCounts.get(floorHeight) ?? 0
-          if (drawn >= MAX_DRAW_PER_FLOOR) continue
-          floorDrawCounts.set(floorHeight, drawn + 1)
-        }
+          const floorHeight = Math.round(entity.displayHeight)
 
-        const peerCount = floorPeerCounts.get(floorHeight) ?? 1
-        const { drawW, drawH } = spriteDrawSize(peerCount, totalEntities, denseRender)
+          if (denseRender && !entity.isSelected) {
+            const drawn = floorDrawCounts.get(floorHeight) ?? 0
+            if (drawn >= MAX_DRAW_PER_FLOOR) continue
+            floorDrawCounts.set(floorHeight, drawn + 1)
+          }
 
-        const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
-        const px = CENTER_X - pw / 2
-        const floorY = yForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
-        const charX = px + entity.floorX * pw - drawW / 2
-        const charY = charYOnFloor(floorY, entity.yOffset, drawH)
+          const peerCount = floorPeerCounts.get(floorHeight) ?? 1
+          const { drawW, drawH } = spriteDrawSize(peerCount, totalEntities, denseRender)
 
-        const pepeFrame = resolvePepeFrame(
-          entity.animState,
-          entity.facing,
-          entity.frame,
-          entity.isDead,
-        )
+          const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
+          const px = CENTER_X - pw / 2
+          const floorY = boardYForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
+          const charX = px + entity.floorX * pw - drawW / 2
+          const charY = charYOnFloor(floorY, entity.yOffset, drawH)
 
-        const useNoOutline = !entity.isSelected
-        drawTintedFrame(
-          ctx,
-          offscreenRef.current!,
-          outlineRef.current!,
-          sprites.pepe,
-          pepeFrame,
-          charX,
-          charY,
-          drawW,
-          drawH,
-          entity.tint,
-          entity.isDead,
-          useNoOutline,
-        )
+          const pepeFrame = resolvePepeFrame(
+            entity.animState,
+            entity.facing,
+            entity.frame,
+            entity.isDead,
+          )
 
-        if (entity.isSelected) {
-          ctx.imageSmoothingEnabled = false
-          ctx.strokeStyle = 'rgba(196, 181, 253, 0.95)'
-          ctx.lineWidth = 1
-          ctx.shadowColor = 'rgba(167, 139, 250, 0.7)'
-          ctx.shadowBlur = 6
-          ctx.strokeRect(charX + 0.5, charY + 0.5, drawW - 1, drawH - 1)
-          ctx.shadowBlur = 0
-        }
-
-        const showIdBadge = entity.isSelected || !denseRender
-        if (showIdBadge) {
-          drawIdBadge(
+          const useNoOutline = !entity.isSelected
+          drawTintedFrame(
             ctx,
+            offscreenRef.current!,
+            outlineRef.current!,
+            sprites.pepe,
+            pepeFrame,
             charX,
             charY,
             drawW,
-            entity.impId,
-            entity.owner,
-            entity.isSelected,
+            drawH,
+            entity.tint,
             entity.isDead,
+            useNoOutline,
           )
-        }
 
-        const showDice =
-          entity.dice !== null &&
-          (entity.animState === 'jump' || now < entity.diceShowUntil)
-        const showDiceBadge = showDice && (entity.isSelected || !denseRender)
-        if (showDiceBadge) {
-          drawDiceBadge(ctx, charX, charY, drawW, entity.dice!)
+          if (entity.isSelected) {
+            ctx.imageSmoothingEnabled = false
+            ctx.strokeStyle = 'rgba(196, 181, 253, 0.95)'
+            ctx.lineWidth = 1
+            ctx.shadowColor = 'rgba(167, 139, 250, 0.7)'
+            ctx.shadowBlur = 6
+            ctx.strokeRect(charX + 0.5, charY + 0.5, drawW - 1, drawH - 1)
+            ctx.shadowBlur = 0
+          }
+
+          const showIdBadge = entity.isSelected || !denseRender
+          if (showIdBadge) {
+            drawIdBadge(
+              ctx,
+              charX,
+              charY,
+              drawW,
+              entity.impId,
+              entity.owner,
+              entity.isSelected,
+              entity.isDead,
+            )
+          }
+
+          const showDice =
+            entity.dice !== null &&
+            (entity.animState === 'jump' || now < entity.diceShowUntil)
+          const showDiceBadge = showDice && (entity.isSelected || !denseRender)
+          if (showDiceBadge) {
+            drawDiceBadge(ctx, charX, charY, drawW, entity.dice!)
+          }
         }
       }
 
-      // Draw billboard ad panel AFTER pepes so label is never buried
+      // Negative floors first, then billboard, then floor 0+ so link bar never hides abyss pepes.
+      drawEntities(true)
+
       const bb = billboardRef.current
-      const floor0Y = yForLevel(0, PADDING_TOP, FLOOR_GAP)
+      const floor0Y = boardYForLevel(0, PADDING_TOP, FLOOR_GAP)
       const floor0Pw = floorWidth(0, MAX_PLATFORM_W, MIN_PLATFORM_W)
       const floor0Px = CENTER_X - floor0Pw / 2
       const stripTopY = floor0Y - PLATFORM_DRAW_H + 2
@@ -858,25 +865,21 @@ export function GameCanvas({
       ctx.save()
       ctx.imageSmoothingEnabled = false
 
-      // Dark brown/amber panel fill matching the strip geometry
       ctx.fillStyle = '#3d2a1a'
       ctx.fillRect(floor0Px, stripTopY, floor0Pw, BILLBOARD_PLATFORM_H)
 
-      // Amber border
       ctx.strokeStyle = '#fbbf24'
       ctx.lineWidth = 1
       ctx.strokeRect(floor0Px + 0.5, stripTopY + 0.5, floor0Pw - 1, BILLBOARD_PLATFORM_H - 1)
 
       if (bb && bb.url && bb.label) {
-        // Pixel-friendly monospace font
         ctx.font = 'bold 10px monospace'
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
 
-        // Truncate with ellipsis if too wide
         const maxTextWidth = floor0Pw - 16
         let labelText = bb.label
-        let metrics = ctx.measureText(labelText)
+        const metrics = ctx.measureText(labelText)
         if (metrics.width > maxTextWidth) {
           while (labelText.length > 3 && ctx.measureText(labelText + '...').width > maxTextWidth) {
             labelText = labelText.slice(0, -1)
@@ -884,12 +887,13 @@ export function GameCanvas({
           labelText = labelText + '...'
         }
 
-        // Amber text for high contrast on dark panel
         ctx.fillStyle = '#fbbf24'
         ctx.fillText(labelText, CENTER_X, stripTopY + BILLBOARD_PLATFORM_H / 2)
       }
 
       ctx.restore()
+
+      drawEntities(false)
 
       rafRef.current = requestAnimationFrame(tick)
     }
@@ -925,7 +929,7 @@ export function GameCanvas({
 
     const bb = billboardRef.current
     if (bb && bb.url && bb.url.startsWith('https://')) {
-      const floor0Y = yForLevel(0, PADDING_TOP, FLOOR_GAP)
+      const floor0Y = boardYForLevel(0, PADDING_TOP, FLOOR_GAP)
       const floor0Pw = floorWidth(0, MAX_PLATFORM_W, MIN_PLATFORM_W)
       const floor0Px = CENTER_X - floor0Pw / 2
       const stripTopY = floor0Y - PLATFORM_DRAW_H + 2
@@ -948,7 +952,7 @@ export function GameCanvas({
 
       const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
       const px = CENTER_X - pw / 2
-      const floorY = yForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
+      const floorY = boardYForLevel(entity.displayHeight, PADDING_TOP, FLOOR_GAP)
       const charX = px + entity.floorX * pw
       const charY = charYOnFloor(floorY, 0, drawH) + drawH / 2
       const dx = x - charX
