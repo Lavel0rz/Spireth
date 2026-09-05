@@ -38,7 +38,7 @@ export function SimSummaryModal({
       <div
         role="dialog"
         aria-labelledby="sim-summary-title"
-        className="w-full max-w-lg rounded-xl border border-zinc-700 bg-zinc-900/95 p-5 shadow-2xl"
+        className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-zinc-700 bg-zinc-900/95 p-5 shadow-2xl"
       >
         <h3 id="sim-summary-title" className="text-lg font-semibold text-zinc-100 mb-1">
           Competition over
@@ -104,15 +104,15 @@ export function SimSummaryModal({
           <h4 className="text-xs font-semibold text-zinc-300 mb-2">
             Living results — {summary.livingAtEnd.toLocaleString()} living
           </h4>
-          <div className="rounded-lg border border-zinc-700 bg-zinc-800/40 max-h-[45vh] overflow-y-auto">
-            <table className="w-full text-xs">
+          <div className="rounded-lg border border-zinc-700 bg-zinc-800/40 max-h-[45vh] overflow-y-auto overflow-x-auto">
+            <table className="w-full table-fixed text-xs">
               <thead className="sticky top-0 bg-zinc-800 z-10">
                 <tr className="border-b border-zinc-700 text-zinc-400">
-                  <th className="px-2 py-1.5 text-left font-medium">Pepe</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Floor</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Spent</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Paid</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Net</th>
+                  <th className="w-[18%] px-2 py-1 text-left font-medium whitespace-nowrap">Pepe</th>
+                  <th className="w-[14%] px-2 py-1 text-right font-medium whitespace-nowrap">Floor</th>
+                  <th className="w-[22%] px-2 py-1 text-right font-medium whitespace-nowrap">Spent</th>
+                  <th className="w-[23%] px-2 py-1 text-right font-medium whitespace-nowrap">Paid</th>
+                  <th className="w-[23%] px-2 py-1 text-right font-medium whitespace-nowrap">Net</th>
                 </tr>
               </thead>
               <tbody>
@@ -121,22 +121,22 @@ export function SimSummaryModal({
                     key={entry.id.toString()}
                     className="border-b border-zinc-700/50 last:border-b-0"
                   >
-                    <td className="px-2 py-1.5 text-zinc-100">
+                    <td className="px-2 py-1 text-zinc-100 whitespace-nowrap">
                       #{entry.id.toString()}
                       {entry.isWinner && <span className="ml-1">🔔</span>}
                     </td>
-                    <td className={`px-2 py-1.5 text-right font-medium ${
+                    <td className={`px-2 py-1 text-right font-medium font-mono tabular-nums whitespace-nowrap ${
                       entry.height > 0 ? 'text-emerald-400' : entry.height < 0 ? 'text-red-400' : 'text-zinc-300'
                     }`}>
                       {entry.height > 0 ? `+${entry.height}` : entry.height}
                     </td>
-                    <td className="px-2 py-1.5 text-right text-zinc-300">
+                    <td className="px-2 py-1 text-right text-zinc-300 font-mono tabular-nums whitespace-nowrap">
                       {formatUsd(entry.spentUsd)}
                     </td>
-                    <td className="px-2 py-1.5 text-right text-violet-300">
+                    <td className="px-2 py-1 text-right text-violet-300 font-mono tabular-nums whitespace-nowrap">
                       {formatUsd(entry.payoutUsd)}
                     </td>
-                    <td className={`px-2 py-1.5 text-right font-medium ${
+                    <td className={`px-2 py-1 text-right font-medium font-mono tabular-nums whitespace-nowrap ${
                       entry.netUsd > 0 ? 'text-emerald-400' : entry.netUsd < 0 ? 'text-red-400' : 'text-zinc-300'
                     }`}>
                       {entry.netUsd > 0 ? '+' : ''}{formatUsd(entry.netUsd)}
