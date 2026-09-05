@@ -66,6 +66,24 @@ export function pepeDeadFrame(): PepeFrame {
   return { col: 12, row: 0 }
 }
 
+export type PepeAnimState = 'walk' | 'commit' | 'revealPending' | 'jump' | 'dead'
+
+/**
+ * Shared Pepe body frame for sim and live boards.
+ * Walk/jump/dead sprites only — commit/reveal-pending keep motion but use walk art
+ * (sim never shows expression frames; live matches that look).
+ */
+export function resolvePepeFrame(
+  animState: PepeAnimState,
+  facing: Direction,
+  frame: number,
+  isDead: boolean,
+): PepeFrame {
+  if (isDead) return pepeDeadFrame()
+  if (animState === 'jump') return pepeJumpFrame(facing, frame)
+  return pepeWalkFrame(facing, frame)
+}
+
 export const PLATFORM_TILE_SIZE = 48
 export const PLATFORM_TILE_SRC_Y = 64
 export const PLATFORM_TILE_SRC_H = 16

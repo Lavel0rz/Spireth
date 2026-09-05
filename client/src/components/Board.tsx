@@ -184,6 +184,7 @@ export function Board({
             onSelectImp={onSelectImp}
             onDisplayMetrics={handleDisplayMetrics}
             billboard={billboard}
+            denseRender={simVisible}
           />
           {simSummary && (
             <SimSummaryModal
