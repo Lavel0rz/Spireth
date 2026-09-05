@@ -30,6 +30,10 @@ export const POOL_SHARE_USD = 4
 export const DEV_SHARE_USD = 1
 export const PAID_TOP_PCT = 50
 export const PAID_MIN_COUNT = 10
+// Aavegotchi-style descending curve — rank 1 >> rank 10 >> long tail.
+// weight = 1/(rank)^ZIPF_EXPONENT where rank is 1-indexed.
+// Independent of paidCount size (unlike (n-i)^2).
+export const ZIPF_EXPONENT = 2
 
 export type SimOutcome = 'summit' | 'abyss'
 
@@ -150,7 +154,9 @@ function buildSummary(
     })
 
   // Pay top 50% of living (min 10 if enough living, else all living).
-  // Quadratic weights (paidCount - i)^2 create a top-heavy distribution.
+  // Aavegotchi-style descending curve: weight = 1/(rank)^ZIPF_EXPONENT.
+  // Rank is 1-indexed so rank 1 gets weight 1, rank 2 gets 1/4, rank 3 gets 1/9, etc.
+  // Top few earn much more; long tail below. Independent of paidCount size.
   const paidCountFromPct = Math.ceil(rankedLiving.length * (PAID_TOP_PCT / 100))
   const paidCount =
     rankedLiving.length >= PAID_MIN_COUNT
@@ -160,13 +166,13 @@ function buildSummary(
 
   let sumWeights = 0
   for (let i = 0; i < paidCount; i++) {
-    const weight = (paidCount - i) * (paidCount - i)
-    sumWeights += weight
+    // i is 0-based; rank is i+1 (1-indexed)
+    sumWeights += 1 / Math.pow(i + 1, ZIPF_EXPONENT)
   }
 
   const rankPayouts = new Map<string, number>()
   for (let i = 0; i < paidCount; i++) {
-    const weight = (paidCount - i) * (paidCount - i)
+    const weight = 1 / Math.pow(i + 1, ZIPF_EXPONENT)
     const share = sumWeights > 0 ? (remainingPoolUsd * weight) / sumWeights : 0
     rankPayouts.set(paidRanks[i].imp.id.toString(), share)
   }

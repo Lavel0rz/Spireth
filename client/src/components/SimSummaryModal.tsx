@@ -1,7 +1,7 @@
 'use client'
 
 import type { SimSummary, Top10Entry } from '@/hooks/useSimulateCompetition'
-import { PAID_TOP_PCT } from '@/hooks/useSimulateCompetition'
+import { PAID_TOP_PCT, ZIPF_EXPONENT } from '@/hooks/useSimulateCompetition'
 import { FLOOR_MAX, FLOOR_MIN } from '@/lib/gameUtils'
 
 function formatUsd(amount: number): string {
@@ -95,7 +95,8 @@ export function SimSummaryModal({
         <div className="rounded-lg border border-violet-700/40 bg-violet-950/30 px-3 py-2.5 text-xs text-violet-100/90 mb-4">
           <span className="font-semibold text-violet-200">Payout:</span>{' '}
           Full prize pool {formatUsd(summary.prizePoolUsd)} rank-weighted to top {PAID_TOP_PCT}% of{' '}
-          {summary.livingAtEnd} living Pepes by |floor| with quadratic weights (n−i)².
+          {summary.livingAtEnd} living Pepes by |floor| via Zipf/rarity-farm curve
+          (1/rank<sup>{ZIPF_EXPONENT}</sup>) — top few earn much more, descending to a long tail.
         </div>
 
         <div className="mb-5">
