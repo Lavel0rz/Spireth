@@ -1,21 +1,46 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAccount } from 'wagmi'
 import { WalletConnect } from '@/components/WalletConnect'
 import { SeasonInfo } from '@/components/SeasonInfo'
 import { Leaderboard } from '@/components/Leaderboard'
-import { Board } from '@/components/Board'
+import { Board, type BoardSimulationProps } from '@/components/Board'
 import { ImpPanel } from '@/components/ImpPanel'
 import { BillboardPanel } from '@/components/BillboardPanel'
 import { RuleChips } from '@/components/RuleChips'
 import { useHasMinted, useOwnedImpId } from '@/hooks/useSpireth'
+import { useIsDevPlaytest, useSimulateCompetition, type ProjectedPayout } from '@/hooks/useSimulateCompetition'
 
 export default function Home() {
   const { address } = useAccount()
   const { data: hasMinted } = useHasMinted(address)
   const { impId: ownedImpId } = useOwnedImpId(address)
   const [selectedImpId, setSelectedImpId] = useState<bigint | null>(null)
+  
+  const isDevPlaytest = useIsDevPlaytest()
+  const simulation = useSimulateCompetition()
+  
+  const boardSimulation: BoardSimulationProps | undefined = useMemo(() => {
+    if (!isDevPlaytest) return undefined
+    return {
+      simActive: simulation.active,
+      simVisible: simulation.simVisible,
+      simImps: simulation.simImps,
+      simStats: simulation.stats,
+      simSummary: simulation.summary,
+      toggleSimulation: simulation.toggle,
+      dismissSummary: simulation.dismissSummary,
+      runAgain: simulation.runAgain,
+    }
+  }, [isDevPlaytest, simulation])
+  
+  const projectedPayout: ProjectedPayout | null = useMemo(() => {
+    if (!simulation.simVisible || selectedImpId === null) return null
+    return simulation.getProjectedPayout(selectedImpId)
+    // Re-compute when stats change (rolls/pool update triggers this)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [simulation.simVisible, simulation.stats, selectedImpId, simulation.getProjectedPayout])
 
   useEffect(() => {
     if (hasMinted === true && ownedImpId !== null) {
@@ -49,6 +74,7 @@ export default function Home() {
             <Board
               selectedImpId={selectedImpId}
               onSelectImp={setSelectedImpId}
+              simulation={boardSimulation}
             />
           </div>
 
@@ -59,7 +85,12 @@ export default function Home() {
               selectedImpId={selectedImpId}
               onSelectImp={setSelectedImpId}
             />
-            <ImpPanel impId={selectedImpId} />
+            <ImpPanel
+              impId={selectedImpId}
+              simMode={simulation.simVisible}
+              projectedPayout={projectedPayout}
+              prizePoolUsd={simulation.stats.prizePoolUsd}
+            />
             <BillboardPanel />
 
             <div className="bg-zinc-900/80 backdrop-blur border border-zinc-800 rounded-xl p-4 shrink-0">

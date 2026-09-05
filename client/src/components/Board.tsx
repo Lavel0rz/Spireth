@@ -12,7 +12,7 @@ import {
   rhombusYFraction,
   type ImpData,
 } from '@/lib/gameUtils'
-import { useIsDevPlaytest, useSimulateCompetition } from '@/hooks/useSimulateCompetition'
+import { useIsDevPlaytest, type SimStats as SimStatsType, type SimSummary } from '@/hooks/useSimulateCompetition'
 import { SimStats } from '@/components/SimStats'
 import { SimSummaryModal } from '@/components/SimSummaryModal'
 
@@ -23,12 +23,25 @@ export interface BillboardData {
   bidder: string
 }
 
+export interface BoardSimulationProps {
+  simActive: boolean
+  simVisible: boolean
+  simImps: ImpData[]
+  simStats: SimStatsType
+  simSummary: SimSummary | null
+  toggleSimulation: () => void
+  dismissSummary: () => void
+  runAgain: () => void
+}
+
 export function Board({
   selectedImpId,
   onSelectImp,
+  simulation,
 }: {
   selectedImpId: bigint | null
   onSelectImp: (id: bigint) => void
+  simulation?: BoardSimulationProps
 }) {
   useSpirethEvents()
   const { data: totalMinted } = useTotalMinted()
@@ -43,16 +56,15 @@ export function Board({
     return { url, label, bid, bidder }
   }, [billboardData])
   const isDevPlaytest = useIsDevPlaytest()
-  const {
-    active: simActive,
-    simVisible,
-    simImps,
-    stats: simStats,
-    summary: simSummary,
-    toggle: toggleSimulation,
-    dismissSummary,
-    runAgain,
-  } = useSimulateCompetition()
+  
+  const simActive = simulation?.simActive ?? false
+  const simVisible = simulation?.simVisible ?? false
+  const simImps = simulation?.simImps ?? []
+  const simStats = simulation?.simStats ?? { rolls: 0, prizePoolUsd: 0, devPayoutUsd: 0, livingCount: 0, deadCount: 0, waves: 0 }
+  const simSummary = simulation?.simSummary ?? null
+  const toggleSimulation = simulation?.toggleSimulation ?? (() => {})
+  const dismissSummary = simulation?.dismissSummary ?? (() => {})
+  const runAgain = simulation?.runAgain ?? (() => {})
 
   const total = totalMinted !== undefined ? Number(totalMinted) : 0
 
@@ -121,7 +133,7 @@ export function Board({
             {simVisible ? (simActive ? ' · sim' : ' · sim ended') : ''}
           </span>
         )}
-        {isDevPlaytest && (
+        {isDevPlaytest && simulation && (
           <div className="flex items-center gap-2 flex-wrap">
             {simVisible && <SimStats stats={simStats} />}
             <button

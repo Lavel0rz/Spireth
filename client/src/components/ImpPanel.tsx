@@ -26,6 +26,7 @@ import {
   useInvalidateSpirethReads,
 } from '@/hooks/useSpireth'
 import { useGameAnimation } from '@/context/GameAnimationContext'
+import type { ProjectedPayout } from '@/hooks/useSimulateCompetition'
 
 function formatTime(seconds: bigint | number | undefined): string {
   if (seconds === undefined) return '...'
@@ -48,7 +49,23 @@ function formatTime(seconds: bigint | number | undefined): string {
 
 const ZERO = BigInt(0)
 
-export function ImpPanel({ impId }: { impId: bigint | null }) {
+function formatUsd(amount: number): string {
+  return amount.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })
+}
+
+export interface ImpPanelProps {
+  impId: bigint | null
+  simMode?: boolean
+  projectedPayout?: ProjectedPayout | null
+  prizePoolUsd?: number
+}
+
+export function ImpPanel({ impId, simMode, projectedPayout, prizePoolUsd }: ImpPanelProps) {
   const { address } = useAccount()
   const { data: seasonState } = useSeasonState()
   const { data: hasMinted } = useHasMinted(address)
@@ -321,6 +338,45 @@ export function ImpPanel({ impId }: { impId: bigint | null }) {
           </div>
         )}
       </div>
+
+      {simMode && projectedPayout && (
+        <div className="border-t border-zinc-800 pt-3">
+          <div className="text-xs uppercase tracking-wider text-zinc-500 mb-2">If Ended Now</div>
+          <div className="flex items-baseline gap-3">
+            <div className="text-sm text-zinc-400">
+              #{projectedPayout.rank}{' '}
+              <span className="text-zinc-600">of {projectedPayout.livingCount}</span>
+            </div>
+            <div className={`text-lg font-bold font-mono tabular-nums ${
+              projectedPayout.payoutUsd > 0 ? 'text-violet-400' : 'text-zinc-600'
+            }`}>
+              {projectedPayout.payoutUsd > 0 ? formatUsd(projectedPayout.payoutUsd) : '$0'}
+            </div>
+            {projectedPayout.rank <= projectedPayout.paidCount && projectedPayout.payoutUsd > 0 && (
+              <span className="text-[10px] text-emerald-500">Top {Math.round((projectedPayout.paidCount / projectedPayout.livingCount) * 100)}%</span>
+            )}
+          </div>
+          {prizePoolUsd !== undefined && prizePoolUsd > 0 && (
+            <div className="text-[10px] text-zinc-600 mt-1">
+              Pool: {formatUsd(prizePoolUsd)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {simMode && !projectedPayout && !isDead && (
+        <div className="border-t border-zinc-800 pt-3">
+          <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">If Ended Now</div>
+          <div className="text-sm text-zinc-600">&mdash;</div>
+        </div>
+      )}
+
+      {simMode && isDead && (
+        <div className="border-t border-zinc-800 pt-3">
+          <div className="text-xs uppercase tracking-wider text-zinc-500 mb-1">If Ended Now</div>
+          <div className="text-sm text-zinc-600">Ineligible (quit)</div>
+        </div>
+      )}
 
       {isOwner && isLive && !isDead && (
         <div className="border-t border-zinc-800 pt-4 space-y-3">
