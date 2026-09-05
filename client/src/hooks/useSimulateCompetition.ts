@@ -44,6 +44,7 @@ export interface SimSummary {
   durationMs: number
   livingAtEnd: number
   top10: Top10Entry[]
+  livingResults: Top10Entry[]
 }
 
 export interface SimStats {
@@ -176,6 +177,11 @@ function buildSummary(
 
   const top10 = paidEntries.filter((e) => e.netUsd >= 0).slice(0, 10)
 
+  const livingResults = rankedLiving.map((r) => {
+    const entry = entries.find((e) => e.id === r.imp.id)!
+    return entry
+  })
+
   return {
     winnerId,
     outcome,
@@ -190,6 +196,7 @@ function buildSummary(
     durationMs: Date.now() - startedAt,
     livingAtEnd,
     top10,
+    livingResults,
   }
 }
 

@@ -93,10 +93,12 @@ export function SimSummaryModal({
         </div>
 
         <div className="mb-5">
-          <h4 className="text-xs font-semibold text-zinc-300 mb-2">Top 10 — spend vs payout</h4>
-          <div className="overflow-x-auto rounded-lg border border-zinc-700 bg-zinc-800/40">
+          <h4 className="text-xs font-semibold text-zinc-300 mb-2">
+            Living results — {summary.livingAtEnd.toLocaleString()} living
+          </h4>
+          <div className="rounded-lg border border-zinc-700 bg-zinc-800/40 max-h-[45vh] overflow-y-auto">
             <table className="w-full text-xs">
-              <thead>
+              <thead className="sticky top-0 bg-zinc-800 z-10">
                 <tr className="border-b border-zinc-700 text-zinc-400">
                   <th className="px-2 py-1.5 text-left font-medium">Pepe</th>
                   <th className="px-2 py-1.5 text-right font-medium">Floor</th>
@@ -106,7 +108,7 @@ export function SimSummaryModal({
                 </tr>
               </thead>
               <tbody>
-                {summary.top10.map((entry) => (
+                {summary.livingResults.map((entry) => (
                   <tr
                     key={entry.id.toString()}
                     className="border-b border-zinc-700/50 last:border-b-0"
