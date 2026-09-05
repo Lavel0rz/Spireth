@@ -75,6 +75,14 @@ export function SimSummaryModal({
             <div className="font-semibold text-amber-300">{formatUsd(summary.devPayoutUsd)}</div>
           </div>
           <div className="rounded-lg bg-zinc-800/60 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wider text-zinc-500">Living</div>
+            <div className="font-semibold text-emerald-400">{summary.livingAtEnd}</div>
+          </div>
+          <div className="rounded-lg bg-zinc-800/60 px-3 py-2">
+            <div className="text-[10px] uppercase tracking-wider text-zinc-500">Quit</div>
+            <div className="font-semibold text-red-400">{1000 - summary.livingAtEnd}</div>
+          </div>
+          <div className="rounded-lg bg-zinc-800/60 px-3 py-2">
             <div className="text-[10px] uppercase tracking-wider text-zinc-500">Waves</div>
             <div className="font-semibold text-zinc-100">{summary.waves}</div>
           </div>

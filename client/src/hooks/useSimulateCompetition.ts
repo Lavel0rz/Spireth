@@ -11,6 +11,20 @@ const SIM_TICK_MS = 2000
 const SIM_FIRST_TICK_MS = 1000
 const SIM_JUMP_STAGGER_MAX_MS = 300
 
+/**
+ * Dropout / give-up mechanics for the 1k Pepe sim.
+ * Calibrated so a typical run with ~25–40 waves ends with ~250–350 living (~700–750 dead).
+ *
+ * - BASE_QUIT_CHANCE: small fatigue chance everyone has (even leaders).
+ * - LOSER_QUIT_CHANCE: extra quit chance for pepes at height=0; scales down linearly to 0 at |height|=50.
+ * - TARGET_DEAD: once this many have died, we drastically reduce quit chance (soft cap).
+ * - MIN_LIVING: hard floor — never kill below this many (keeps game viable until tip).
+ */
+const SIM_BASE_QUIT_CHANCE = 0.012
+const SIM_LOSER_QUIT_CHANCE = 0.085
+const SIM_TARGET_DEAD = 700
+const SIM_MIN_LIVING = 50
+
 export const ROLL_USD = 5
 export const POOL_SHARE_USD = 4
 export const DEV_SHARE_USD = 1
@@ -48,6 +62,7 @@ export interface SimStats {
   prizePoolUsd: number
   devPayoutUsd: number
   livingCount: number
+  deadCount: number
   waves: number
 }
 
@@ -65,6 +80,20 @@ function randomInt(min: number, max: number): number {
 
 function clampFloor(height: number): number {
   return Math.max(FLOOR_MIN, Math.min(FLOOR_MAX, height))
+}
+
+/**
+ * Calculate quit probability for a pepe based on their height.
+ * Losers at height 0 have the highest chance; leaders near ±50 have almost none.
+ */
+function quitProbability(height: number, currentDead: number): number {
+  if (currentDead >= SIM_TARGET_DEAD) {
+    return SIM_BASE_QUIT_CHANCE * 0.1
+  }
+
+  const absHeight = Math.abs(height)
+  const heightFactor = 1 - absHeight / FLOOR_MAX
+  return SIM_BASE_QUIT_CHANCE + SIM_LOSER_QUIT_CHANCE * heightFactor
 }
 
 function generateUniqueOwners(count: number): string[] {
@@ -207,6 +236,7 @@ export function useSimulateCompetition() {
     prizePoolUsd: 0,
     devPayoutUsd: 0,
     livingCount: SIM_IMP_COUNT,
+    deadCount: 0,
     waves: 0,
   })
 
@@ -240,12 +270,13 @@ export function useSimulateCompetition() {
     return id
   }, [])
 
-  const syncStats = useCallback((livingCount: number) => {
+  const syncStats = useCallback((livingCount: number, deadCount: number) => {
     setStats({
       rolls: rollsRef.current,
       prizePoolUsd: poolUsdRef.current,
       devPayoutUsd: devUsdRef.current,
       livingCount,
+      deadCount,
       waves: wavesRef.current,
     })
   }, [])
@@ -319,7 +350,8 @@ export function useSimulateCompetition() {
         triggerReveal(imp.id, dice, newHeight)
 
         const livingCount = impsRef.current.filter((entry) => !entry.isDead).length
-        syncStats(livingCount)
+        const deadCount = impsRef.current.length - livingCount
+        syncStats(livingCount, deadCount)
 
         scheduleTimeout(() => {
           if (endedRef.current) return
@@ -364,6 +396,7 @@ export function useSimulateCompetition() {
       prizePoolUsd: 0,
       devPayoutUsd: 0,
       livingCount: SIM_IMP_COUNT,
+      deadCount: 0,
       waves: 0,
     })
   }, [clearPendingTimeouts])
@@ -376,7 +409,7 @@ export function useSimulateCompetition() {
     startedAtRef.current = Date.now()
     setSimImps(imps)
     setActive(true)
-    syncStats(imps.length)
+    syncStats(imps.length, 0)
   }, [resetState, syncStats])
 
   const stop = useCallback(() => {
@@ -405,16 +438,40 @@ export function useSimulateCompetition() {
     const tick = () => {
       if (endedRef.current) return
 
-      const living = impsRef.current.filter((imp) => !imp.isDead)
+      let living = impsRef.current.filter((imp) => !imp.isDead)
       if (living.length === 0) return
 
       wavesRef.current += 1
+
+      const deadCount = impsRef.current.length - living.length
+      const dropoutIds: bigint[] = []
+
+      for (const imp of living) {
+        if (living.length - dropoutIds.length <= SIM_MIN_LIVING) break
+
+        const height = heightsRef.current.get(imp.id.toString()) ?? imp.height
+        const pQuit = quitProbability(height, deadCount + dropoutIds.length)
+
+        if (Math.random() < pQuit) {
+          dropoutIds.push(imp.id)
+        }
+      }
+
+      if (dropoutIds.length > 0) {
+        setSimImps((prev) =>
+          prev.map((entry) =>
+            dropoutIds.includes(entry.id) ? { ...entry, isDead: true } : entry,
+          ),
+        )
+        living = living.filter((imp) => !dropoutIds.includes(imp.id))
+      }
 
       for (const imp of living) {
         scheduleRollForImp(imp)
       }
 
-      syncStats(living.length)
+      const newDeadCount = impsRef.current.length - living.length
+      syncStats(living.length, newDeadCount)
     }
 
     const firstTickId = window.setTimeout(() => {

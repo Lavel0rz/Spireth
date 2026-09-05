@@ -27,6 +27,9 @@ export function SimStats({ stats }: { stats: SimStatsData }) {
         Living <span className="text-emerald-300 font-semibold">{stats.livingCount}</span>
       </span>
       <span>
+        Quit <span className="text-red-400 font-semibold">{stats.deadCount}</span>
+      </span>
+      <span>
         Wave <span className="text-zinc-300 font-semibold">{stats.waves}</span>
       </span>
     </div>
