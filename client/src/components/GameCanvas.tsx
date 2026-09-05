@@ -23,11 +23,7 @@ import {
   floorHalfWidth,
   floorWidth,
   laneBounds,
-  pepeCommitFrame,
-  pepeDeadFrame,
-  pepeJumpFrame,
-  pepeRevealFrame,
-  pepeWalkFrame,
+  resolvePepeFrame,
   shortAddress,
   jumpDurationMs,
   shouldShowFloorLabel,
@@ -47,7 +43,6 @@ const CANVAS_H = BOARD_CANVAS_H
 const CENTER_X = CANVAS_W / 2
 const HIT_RADIUS_RATIO = 0.65
 const CROWDED_FLOOR_THRESHOLD = 4
-const LARGE_SIM_THRESHOLD = 200
 const VERY_LARGE_SIM_THRESHOLD = 500
 const CROWDED_SPRITE_SCALE = 0.88
 const VERY_LARGE_SPRITE_SCALE = 0.78
@@ -320,9 +315,13 @@ function charYOnFloor(floorY: number, yOffset: number, drawH: number): number {
   return platformTop - footOffset + yOffset
 }
 
-function spriteDrawSize(peerCount: number, totalEntities: number): { drawW: number; drawH: number } {
+function spriteDrawSize(
+  peerCount: number,
+  totalEntities: number,
+  denseRender: boolean,
+): { drawW: number; drawH: number } {
   let scale = 1
-  if (totalEntities >= VERY_LARGE_SIM_THRESHOLD) {
+  if (denseRender && totalEntities >= VERY_LARGE_SIM_THRESHOLD) {
     scale = VERY_LARGE_SPRITE_SCALE
   } else if (peerCount > CROWDED_FLOOR_THRESHOLD) {
     scale = CROWDED_SPRITE_SCALE
@@ -407,12 +406,15 @@ export function GameCanvas({
   onSelectImp,
   onDisplayMetrics,
   billboard,
+  denseRender = false,
 }: {
   imps: ImpData[]
   selectedImpId: bigint | null
   onSelectImp: (id: bigint) => void
   onDisplayMetrics?: (metrics: GameCanvasDisplayMetrics) => void
   billboard: BillboardData | null
+  /** 1k sim perf LOD — does not change per-Pepe sprite style (live matches sim art). */
+  denseRender?: boolean
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -431,13 +433,15 @@ export function GameCanvas({
   const expandedFloorRef = useRef<number | null>(null)
   const [expandedFloor, setExpandedFloor] = useState<number | null>(null)
   const billboardRef = useRef(billboard)
+  const denseRenderRef = useRef(denseRender)
 
   useEffect(() => {
     impsRef.current = imps
     selectedRef.current = selectedImpId
     expandedFloorRef.current = expandedFloor
     billboardRef.current = billboard
-  }, [imps, selectedImpId, expandedFloor, billboard])
+    denseRenderRef.current = denseRender
+  }, [imps, selectedImpId, expandedFloor, billboard, denseRender])
 
   const displayWidth = CANVAS_W * fitScale
   const displayHeight = CANVAS_H * fitScale
@@ -593,7 +597,7 @@ export function GameCanvas({
       syncEntities()
 
       const totalEntities = entitiesRef.current.size
-      const isLargeSim = totalEntities >= LARGE_SIM_THRESHOLD
+      const denseRender = denseRenderRef.current
       const isOddFrame = frameCountRef.current % 2 === 1
       const now = Date.now()
 
@@ -632,7 +636,7 @@ export function GameCanvas({
             entity.direction = 1
             entity.facing = 'right'
           }
-          const shouldAdvanceFrame = !isLargeSim || entity.isSelected || !isOddFrame
+          const shouldAdvanceFrame = !denseRender || entity.isSelected || !isOddFrame
           if (shouldAdvanceFrame && entity.frameTimer > 140) {
             entity.frameTimer = 0
             entity.frame = (entity.frame + 1) % 4
@@ -760,7 +764,7 @@ export function GameCanvas({
         (a, b) => a.displayHeight - b.displayHeight,
       )
 
-      if (isLargeSim) {
+      if (denseRender) {
         sorted = sorted.filter((e) => {
           if (!e.isDead) return true
           if (e.isSelected) return true
@@ -773,14 +777,14 @@ export function GameCanvas({
       for (const entity of sorted) {
         const floorHeight = Math.round(entity.displayHeight)
 
-        if (isLargeSim && !entity.isSelected) {
+        if (denseRender && !entity.isSelected) {
           const drawn = floorDrawCounts.get(floorHeight) ?? 0
           if (drawn >= MAX_DRAW_PER_FLOOR) continue
           floorDrawCounts.set(floorHeight, drawn + 1)
         }
 
         const peerCount = floorPeerCounts.get(floorHeight) ?? 1
-        const { drawW, drawH } = spriteDrawSize(peerCount, totalEntities)
+        const { drawW, drawH } = spriteDrawSize(peerCount, totalEntities, denseRender)
 
         const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
         const px = CENTER_X - pw / 2
@@ -788,20 +792,14 @@ export function GameCanvas({
         const charX = px + entity.floorX * pw - drawW / 2
         const charY = charYOnFloor(floorY, entity.yOffset, drawH)
 
-        let pepeFrame: PepeFrame
-        if (entity.isDead) {
-          pepeFrame = pepeDeadFrame()
-        } else if (entity.animState === 'commit') {
-          pepeFrame = pepeCommitFrame(entity.animTimer)
-        } else if (entity.animState === 'revealPending') {
-          pepeFrame = pepeRevealFrame(entity.animTimer)
-        } else if (entity.animState === 'jump') {
-          pepeFrame = pepeJumpFrame(entity.facing, entity.frame)
-        } else {
-          pepeFrame = pepeWalkFrame(entity.facing, entity.frame)
-        }
+        const pepeFrame = resolvePepeFrame(
+          entity.animState,
+          entity.facing,
+          entity.frame,
+          entity.isDead,
+        )
 
-        const useNoOutline = isLargeSim && !entity.isSelected
+        const useNoOutline = !entity.isSelected
         drawTintedFrame(
           ctx,
           offscreenRef.current!,
@@ -827,7 +825,7 @@ export function GameCanvas({
           ctx.shadowBlur = 0
         }
 
-        const showIdBadge = entity.isSelected || !isLargeSim
+        const showIdBadge = entity.isSelected || !denseRender
         if (showIdBadge) {
           drawIdBadge(
             ctx,
@@ -844,7 +842,7 @@ export function GameCanvas({
         const showDice =
           entity.dice !== null &&
           (entity.animState === 'jump' || now < entity.diceShowUntil)
-        const showDiceBadge = showDice && (entity.isSelected || !isLargeSim)
+        const showDiceBadge = showDice && (entity.isSelected || !denseRender)
         if (showDiceBadge) {
           drawDiceBadge(ctx, charX, charY, drawW, entity.dice!)
         }
@@ -898,7 +896,7 @@ export function GameCanvas({
 
     rafRef.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [ready, sprites, syncEntities])
+  }, [ready, sprites, syncEntities, denseRender])
 
   useEffect(() => {
     const container = viewportRef.current
@@ -940,12 +938,13 @@ export function GameCanvas({
 
     let closest: { id: string; dist: number; floor: number } | null = null
     const totalEntities = entitiesRef.current.size
+    const denseRender = denseRenderRef.current
     for (const entity of entitiesRef.current.values()) {
       const floorHeight = Math.round(entity.displayHeight)
       const peerCount = [...entitiesRef.current.values()].filter(
         (entry) => Math.round(entry.displayHeight) === floorHeight,
       ).length
-      const { drawW, drawH } = spriteDrawSize(peerCount, totalEntities)
+      const { drawW, drawH } = spriteDrawSize(peerCount, totalEntities, denseRender)
 
       const pw = floorWidth(entity.displayHeight, MAX_PLATFORM_W, MIN_PLATFORM_W)
       const px = CENTER_X - pw / 2
