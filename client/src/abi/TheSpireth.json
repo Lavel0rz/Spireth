@@ -118,7 +118,20 @@
   },
   {
     "type": "function",
-    "name": "ROLL_COOLDOWN",
+    "name": "ROLL_COOLDOWN_FLOOR",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "ROLL_LADDER_STEPS",
     "inputs": [],
     "outputs": [
       {
@@ -664,6 +677,40 @@
   },
   {
     "type": "function",
+    "name": "getRollCooldownInfo",
+    "inputs": [
+      {
+        "name": "impId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "ladderStep",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "ladderSteps",
+        "type": "uint8",
+        "internalType": "uint8"
+      },
+      {
+        "name": "cooldownSeconds",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "secondsUntilNextRoll",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "hasBellRinger",
     "inputs": [],
     "outputs": [
@@ -737,6 +784,11 @@
         "name": "heightReachedAt",
         "type": "uint64",
         "internalType": "uint64"
+      },
+      {
+        "name": "rollCount",
+        "type": "uint16",
+        "internalType": "uint16"
       },
       {
         "name": "isDead",

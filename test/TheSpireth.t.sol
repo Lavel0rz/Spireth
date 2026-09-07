@@ -70,6 +70,103 @@ contract TheSpirethTest is Test {
         spireth.soundHorn();
     }
 
+    function test_RollCooldownLadder() public {
+        _setupLiveSeason();
+        uint256 secret = 1;
+
+        // First roll: no prior cooldown
+        _commitAndReveal(0, secret++);
+
+        // Second roll blocked until 24h after first reveal
+        bytes32 commitment = keccak256(abi.encodePacked(secret, uint256(0)));
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.RollOnCooldown.selector);
+        spireth.commitRoll{value: ROLL_COST}(0, commitment);
+
+        vm.warp(block.timestamp + 24 hours - 1);
+        assertFalse(spireth.canRoll(0));
+        vm.warp(block.timestamp + 1);
+        assertTrue(spireth.canRoll(0));
+
+        _commitAndReveal(0, secret++);
+
+        // Third roll blocked until 12h after second reveal
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.RollOnCooldown.selector);
+        spireth.commitRoll{value: ROLL_COST}(0, keccak256(abi.encodePacked(secret, uint256(0))));
+
+        vm.warp(block.timestamp + 12 hours + 1);
+        _commitAndReveal(0, secret++);
+
+        // Fourth roll: 6h cooldown
+        vm.warp(block.timestamp + 6 hours + 1);
+        _commitAndReveal(0, secret++);
+
+        // Fifth roll: 3h cooldown
+        vm.warp(block.timestamp + 3 hours + 1);
+        _commitAndReveal(0, secret++);
+
+        // Sixth roll: 2h cooldown
+        vm.warp(block.timestamp + 2 hours + 1);
+        _commitAndReveal(0, secret++);
+
+        // Seventh roll and beyond: 1h floor
+        vm.warp(block.timestamp + 1 hours - 1);
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.RollOnCooldown.selector);
+        spireth.commitRoll{value: ROLL_COST}(0, keccak256(abi.encodePacked(secret, uint256(0))));
+
+        vm.warp(block.timestamp + 1);
+        _commitAndReveal(0, secret++);
+
+        vm.warp(block.timestamp + 1 hours - 1);
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.RollOnCooldown.selector);
+        spireth.commitRoll{value: ROLL_COST}(0, keccak256(abi.encodePacked(secret, uint256(0))));
+
+        vm.warp(block.timestamp + 1);
+        assertTrue(spireth.canRoll(0));
+    }
+
+    function test_RollCooldownInfoView() public {
+        _setupLiveSeason();
+        uint256 secret = 1;
+
+        (uint8 step, uint8 steps, uint256 cooldown, uint256 wait) = spireth.getRollCooldownInfo(0);
+        assertEq(step, 1);
+        assertEq(steps, 6);
+        assertEq(cooldown, 0);
+        assertEq(wait, 0);
+
+        _commitAndReveal(0, secret++);
+
+        (step, steps, cooldown, wait) = spireth.getRollCooldownInfo(0);
+        assertEq(step, 1);
+        assertEq(steps, 6);
+        assertEq(cooldown, 24 hours);
+        assertEq(wait, 24 hours);
+
+        vm.warp(block.timestamp + 24 hours + 1);
+        (step, , , wait) = spireth.getRollCooldownInfo(0);
+        assertEq(step, 2);
+        assertEq(wait, 0);
+
+        _commitAndReveal(0, secret++);
+        (step, , cooldown, wait) = spireth.getRollCooldownInfo(0);
+        assertEq(step, 2);
+        assertEq(cooldown, 12 hours);
+        assertEq(wait, 12 hours);
+
+        for (uint256 i = 0; i < 4; i++) {
+            vm.warp(block.timestamp + spireth.timeUntilNextRoll(0) + 1);
+            _commitAndReveal(0, secret++);
+        }
+
+        (step, , cooldown, ) = spireth.getRollCooldownInfo(0);
+        assertEq(step, 6);
+        assertEq(cooldown, 1 hours);
+    }
+
     function test_CommitAndRevealRoll() public {
         _setupLiveSeason();
         uint256 secret = 12345;
@@ -198,7 +295,7 @@ contract TheSpirethTest is Test {
                 break;
             }
             
-            vm.warp(block.timestamp + 24 hours + 1);
+            vm.warp(block.timestamp + spireth.timeUntilNextRoll(0) + 1);
             secret++;
         }
         
@@ -231,7 +328,7 @@ contract TheSpirethTest is Test {
                 break;
             }
             
-            vm.warp(block.timestamp + 24 hours + 1);
+            vm.warp(block.timestamp + spireth.timeUntilNextRoll(0) + 1);
             secret++;
         }
         
@@ -643,6 +740,15 @@ contract TheSpirethTest is Test {
         vm.prank(alice);
         vm.expectRevert(TheSpireth.NoPfpEquipped.selector);
         spireth.clearPfp(0);
+    }
+
+    function _commitAndReveal(uint256 impId, uint256 secret) internal {
+        bytes32 commitment = keccak256(abi.encodePacked(secret, impId));
+        vm.prank(alice);
+        spireth.commitRoll{value: ROLL_COST}(impId, commitment);
+        vm.roll(block.number + 4);
+        vm.prank(alice);
+        spireth.revealRoll(impId, secret);
     }
 
     function _setupLiveSeason() internal {

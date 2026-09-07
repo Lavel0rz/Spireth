@@ -9,6 +9,7 @@ import {
   useCanReveal,
   useTimeUntilDeath,
   useTimeUntilNextRoll,
+  useRollCooldownInfo,
   usePendingRoll,
   useRollCost,
   useSeasonState,
@@ -27,6 +28,7 @@ import {
 } from '@/hooks/useSpireth'
 import { useGameAnimation } from '@/context/GameAnimationContext'
 import type { ProjectedPayout } from '@/hooks/useSimulateCompetition'
+import { formatRollLadderLabel } from '@/lib/rollCooldownUtils'
 
 function formatTime(seconds: bigint | number | undefined): string {
   if (seconds === undefined) return '...'
@@ -82,6 +84,7 @@ export function ImpPanel({ impId, simMode, projectedPayout, prizePoolUsd }: ImpP
   const { data: canReveal } = useCanReveal(impId ?? ZERO)
   const { data: timeUntilDeath } = useTimeUntilDeath(impId ?? ZERO)
   const { data: timeUntilNextRoll } = useTimeUntilNextRoll(impId ?? ZERO)
+  const { data: rollCooldownInfo } = useRollCooldownInfo(impId ?? ZERO)
   const { data: pendingRoll } = usePendingRoll(impId ?? ZERO)
   const { data: impPrize } = useImpPrize(impId ?? ZERO)
   
@@ -304,6 +307,14 @@ export function ImpPanel({ impId, simMode, projectedPayout, prizePoolUsd }: ImpP
 
   const timeUntilDeathNum = timeUntilDeath !== undefined ? Number(timeUntilDeath as bigint) : 0
   const timeUntilNextRollNum = timeUntilNextRoll !== undefined ? Number(timeUntilNextRoll as bigint) : 0
+  const rollCooldownInfoArray = rollCooldownInfo as [number, number, bigint, bigint] | undefined
+  const ladderStep = rollCooldownInfoArray ? Number(rollCooldownInfoArray[0]) : 1
+  const ladderSteps = rollCooldownInfoArray ? Number(rollCooldownInfoArray[1]) : 6
+  const rollCooldownLabel = formatRollLadderLabel(
+    ladderStep,
+    ladderSteps,
+    rollCooldownInfoArray ? Number(rollCooldownInfoArray[3]) : timeUntilNextRollNum,
+  )
   const prizeValue = impPrize !== undefined ? (impPrize as bigint) : ZERO
 
   return (
@@ -424,8 +435,11 @@ export function ImpPanel({ impId, simMode, projectedPayout, prizePoolUsd }: ImpP
           ) : (
             <>
               {timeUntilNextRollNum > 0 ? (
-                <div className="text-sm text-zinc-400">
-                  Next roll in: <span className="text-zinc-200">{formatTime(timeUntilNextRoll as bigint | undefined)}</span>
+                <div className="space-y-1">
+                  <div className="text-sm text-zinc-400">
+                    Next roll in: <span className="text-zinc-200">{formatTime(timeUntilNextRoll as bigint | undefined)}</span>
+                  </div>
+                  <div className="text-xs text-zinc-500">{rollCooldownLabel}</div>
                 </div>
               ) : (
                 <button
@@ -435,6 +449,9 @@ export function ImpPanel({ impId, simMode, projectedPayout, prizePoolUsd }: ImpP
                 >
                   {isCommitting ? 'Confirming...' : isCommitConfirming ? 'Rolling...' : `Roll (${formatEther(rollCost as bigint ?? ZERO)} ETH)`}
                 </button>
+              )}
+              {timeUntilNextRollNum === 0 && canRoll && (
+                <div className="text-xs text-zinc-500 text-center">{rollCooldownLabel}</div>
               )}
             </>
           )}
