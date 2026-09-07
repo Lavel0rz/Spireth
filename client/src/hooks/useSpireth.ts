@@ -203,6 +203,17 @@ export function useTimeUntilNextRoll(impId: bigint) {
   })
 }
 
+export function useRollCooldownInfo(impId: bigint) {
+  const address = useContractAddress()
+  return useReadContract({
+    address,
+    abi: SPIRETH_ABI,
+    functionName: 'getRollCooldownInfo',
+    args: [impId],
+    query: { refetchInterval: 1000 },
+  })
+}
+
 export function usePendingRoll(impId: bigint) {
   const address = useContractAddress()
   return useReadContract({

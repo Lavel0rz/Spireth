@@ -38,7 +38,8 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     int8 public constant ABYSS = -50;
     uint256 public constant SIGNUP_DURATION = 72 hours;
     uint256 public constant SEASON_MAX_DURATION = 45 days;
-    uint256 public constant ROLL_COOLDOWN = 24 hours;
+    uint256 public constant ROLL_LADDER_STEPS = 6;
+    uint256 public constant ROLL_COOLDOWN_FLOOR = 1 hours;
     uint256 public constant DEATH_THRESHOLD = 72 hours;
     uint256 public constant REVEAL_WINDOW = 256;
     uint256 public constant REVEAL_DELAY = 3;
@@ -54,6 +55,7 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         uint64 lastRoll;
         uint64 lastActivity;
         uint64 heightReachedAt;
+        uint16 rollCount;
         bool isDead;
         bool hasClaimedRank;
     }
@@ -184,6 +186,7 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
             lastRoll: 0,
             lastActivity: uint64(block.timestamp),
             heightReachedAt: uint64(block.timestamp),
+            rollCount: 0,
             isDead: false,
             hasClaimedRank: false
         });
@@ -218,7 +221,7 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         _updateDeathStatus(impId);
         if (imp.isDead) revert ImpIsDead();
         
-        if (imp.lastRoll != 0 && block.timestamp < imp.lastRoll + ROLL_COOLDOWN) revert RollOnCooldown();
+        if (imp.lastRoll != 0 && block.timestamp < imp.lastRoll + _rollCooldown(imp.rollCount)) revert RollOnCooldown();
         
         if (pendingRolls[impId].pending) revert AlreadyHasPendingRoll();
         
@@ -286,6 +289,7 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         imp.lastRoll = uint64(block.timestamp);
         imp.lastActivity = uint64(block.timestamp);
         imp.heightReachedAt = uint64(block.timestamp);
+        imp.rollCount++;
         
         emit RollRevealed(impId, dice, newHeight);
         
@@ -461,7 +465,7 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
         Imp storage imp = imps[impId];
         if (imp.isDead) return false;
         if (block.timestamp > imp.lastActivity + DEATH_THRESHOLD) return false;
-        if (imp.lastRoll != 0 && block.timestamp < imp.lastRoll + ROLL_COOLDOWN) return false;
+        if (imp.lastRoll != 0 && block.timestamp < imp.lastRoll + _rollCooldown(imp.rollCount)) return false;
         
         return true;
     }
@@ -485,9 +489,46 @@ contract TheSpireth is ERC721, Ownable, ReentrancyGuard {
     
     function timeUntilNextRoll(uint256 impId) external view returns (uint256) {
         Imp storage imp = imps[impId];
-        uint256 nextRollTime = imp.lastRoll + ROLL_COOLDOWN;
+        if (imp.lastRoll == 0) return 0;
+        uint256 nextRollTime = imp.lastRoll + _rollCooldown(imp.rollCount);
         if (block.timestamp >= nextRollTime) return 0;
         return nextRollTime - block.timestamp;
+    }
+
+    function getRollCooldownInfo(uint256 impId) external view returns (
+        uint8 ladderStep,
+        uint8 ladderSteps,
+        uint256 cooldownSeconds,
+        uint256 secondsUntilNextRoll
+    ) {
+        Imp storage imp = imps[impId];
+        ladderSteps = uint8(ROLL_LADDER_STEPS);
+        cooldownSeconds = _rollCooldown(imp.rollCount);
+        secondsUntilNextRoll = 0;
+
+        if (imp.lastRoll != 0 && block.timestamp < imp.lastRoll + cooldownSeconds) {
+            secondsUntilNextRoll = imp.lastRoll + cooldownSeconds - block.timestamp;
+            ladderStep = _rollLadderStepOnCooldown(imp.rollCount);
+        } else {
+            ladderStep = imp.rollCount >= ROLL_LADDER_STEPS
+                ? uint8(ROLL_LADDER_STEPS)
+                : uint8(imp.rollCount + 1);
+        }
+    }
+
+    function _rollCooldown(uint256 completedRolls) internal pure returns (uint256) {
+        if (completedRolls == 0) return 0;
+        if (completedRolls >= ROLL_LADDER_STEPS) return ROLL_COOLDOWN_FLOOR;
+        if (completedRolls == 1) return 24 hours;
+        if (completedRolls == 2) return 12 hours;
+        if (completedRolls == 3) return 6 hours;
+        if (completedRolls == 4) return 3 hours;
+        return 2 hours;
+    }
+
+    function _rollLadderStepOnCooldown(uint256 completedRolls) internal pure returns (uint8) {
+        if (completedRolls >= ROLL_LADDER_STEPS) return uint8(ROLL_LADDER_STEPS);
+        return uint8(completedRolls);
     }
     
     function signupTimeRemaining() external view returns (uint256) {

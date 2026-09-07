@@ -1,7 +1,7 @@
 const CHIPS = [
   { icon: '⬥', label: 'Board', detail: '±50 floors' },
   { icon: '🎲', label: 'Dice', detail: '±1 to ±4' },
-  { icon: '⏰', label: 'Roll', detail: 'Once/24h' },
+  { icon: '⏰', label: 'Roll', detail: '24h→1h ladder' },
   { icon: '💀', label: 'Death', detail: '72h idle' },
   { icon: '🏆', label: 'Bell', detail: '+20% bonus' },
 ] as const
