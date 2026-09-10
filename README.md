@@ -14,10 +14,10 @@ forge test
 
 ## Overview
 
-The Spireth is a competitive blockchain game where players mint Imps and roll dice daily to climb (or descend) a vertical board. The first Imp to reach the summit (+25) or abyss (-25) rings the bell and freezes the season. The top 50% of **living** Imps split the prize pool.
+The Spireth is a competitive blockchain game where players mint Imps and roll dice daily to climb (or descend) a vertical board. The first Imp to reach the summit (+50) or abyss (-50) rings the bell and freezes the season. The top 50% of **living** Imps split the prize pool.
 
 ### Game Parameters
-- **Summit/Abyss:** ±25 floors
+- **Summit/Abyss:** ±50 floors
 - **Roll Cost:** $5 / 0.002 ETH
 - **Split:** 80% to prize pool, 20% to dev
 - **Imps per Wallet:** 1

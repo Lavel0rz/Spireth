@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
 import "../src/TheSpireth.sol";
+import "./helpers/MerkleTreeHelper.sol";
 
 contract TheSpirethTest is Test {
     TheSpireth public spireth;
@@ -612,6 +613,178 @@ contract TheSpirethTest is Test {
         spireth.sweepDust(owner);
     }
 
+    function test_ClaimRankNotOwnerReverts() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+
+        uint256 impId = 0;
+        uint256 amount = 0.1 ether;
+        bytes32 leaf = MerkleTreeHelper.prizeLeaf(impId, amount);
+        bytes32[] memory leaves = new bytes32[](1);
+        leaves[0] = leaf;
+
+        vm.prank(owner);
+        spireth.publishPrizeRoot(MerkleTreeHelper.buildRoot(leaves));
+
+        bytes32[] memory proof = MerkleTreeHelper.getProof(leaves, 0);
+
+        vm.prank(bob);
+        vm.expectRevert(TheSpireth.NotImpOwner.selector);
+        spireth.claimRank(impId, amount, proof);
+    }
+
+    function test_ClaimRankWrongAmountReverts() public {
+        _setupLiveSeasonWithPool();
+        _freezeWithBellRinger();
+
+        uint256 impId = 0;
+        uint256 amount = 0.1 ether;
+        uint256 wrongAmount = 0.2 ether;
+        bytes32[] memory leaves = new bytes32[](1);
+        leaves[0] = MerkleTreeHelper.prizeLeaf(impId, amount);
+
+        vm.prank(owner);
+        spireth.publishPrizeRoot(MerkleTreeHelper.buildRoot(leaves));
+
+        bytes32[] memory proof = MerkleTreeHelper.getProof(leaves, 0);
+
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.InvalidProof.selector);
+        spireth.claimRank(impId, wrongAmount, proof);
+    }
+
+    function test_PayoutClaimsEndToEnd() public {
+        vm.deal(alice, 100 ether);
+        vm.deal(bob, 100 ether);
+        vm.deal(charlie, 100 ether);
+
+        vm.prank(alice);
+        spireth.mint();
+        vm.prank(bob);
+        spireth.mint();
+        vm.prank(charlie);
+        spireth.mint();
+        vm.prank(owner);
+        spireth.soundHorn();
+
+        bytes32 commitment = keccak256(abi.encodePacked(uint256(1), uint256(0)));
+        vm.prank(alice);
+        spireth.commitRoll{value: 1 ether}(0, commitment);
+        vm.prank(bob);
+        spireth.commitRoll{value: 2 ether}(1, commitment);
+
+        uint256 pool = spireth.prizePool();
+        _freezeWithBellRinger(1);
+
+        uint256 expectedBellPrize = pool * 20 / 100;
+        uint256 expectedRankPool = pool - expectedBellPrize;
+        assertEq(spireth.bellRingerPrize(), expectedBellPrize);
+        assertEq(spireth.rankPrizePool(), expectedRankPool);
+        assertEq(spireth.bellRingerId(), 1);
+        assertTrue(spireth.hasBellRinger());
+
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.NotImpOwner.selector);
+        spireth.claimBell();
+
+        uint256 bobBefore = bob.balance;
+        vm.prank(bob);
+        spireth.claimBell();
+        assertEq(bob.balance - bobBefore, expectedBellPrize);
+        assertTrue(spireth.bellClaimed());
+
+        vm.prank(bob);
+        vm.expectRevert(TheSpireth.AlreadyClaimed.selector);
+        spireth.claimBell();
+
+        uint256 amountAlice = expectedRankPool * 2 / 3;
+        uint256 amountCharlie = expectedRankPool - amountAlice;
+
+        bytes32[] memory leaves = new bytes32[](2);
+        leaves[0] = MerkleTreeHelper.prizeLeaf(0, amountAlice);
+        leaves[1] = MerkleTreeHelper.prizeLeaf(2, amountCharlie);
+        bytes32 root = MerkleTreeHelper.buildRoot(leaves);
+
+        vm.prank(owner);
+        spireth.publishPrizeRoot(root);
+
+        uint256 aliceBefore = alice.balance;
+        vm.prank(alice);
+        spireth.claimRank(0, amountAlice, MerkleTreeHelper.getProof(leaves, 0));
+        assertEq(alice.balance - aliceBefore, amountAlice);
+
+        uint256 charlieBefore = charlie.balance;
+        vm.prank(charlie);
+        spireth.claimRank(2, amountCharlie, MerkleTreeHelper.getProof(leaves, 1));
+        assertEq(charlie.balance - charlieBefore, amountCharlie);
+
+        assertEq(spireth.rankClaimedTotal(), amountAlice + amountCharlie);
+        assertLe(spireth.rankClaimedTotal(), expectedRankPool);
+
+        vm.prank(bob);
+        vm.expectRevert(TheSpireth.InvalidProof.selector);
+        spireth.claimRank(1, 0.1 ether, MerkleTreeHelper.getProof(leaves, 0));
+
+        vm.prank(alice);
+        vm.expectRevert(TheSpireth.AlreadyClaimed.selector);
+        spireth.claimRank(0, amountAlice, MerkleTreeHelper.getProof(leaves, 0));
+
+        vm.deal(address(spireth), address(spireth).balance + 0.001 ether);
+        address dustReceiver = makeAddr("dustReceiver");
+        uint256 dustBefore = dustReceiver.balance;
+        vm.prank(owner);
+        spireth.sweepDust(dustReceiver);
+        assertGt(dustReceiver.balance, dustBefore);
+    }
+
+    function test_PayoutClaimsMultiLeafMerkle() public {
+        vm.deal(alice, 100 ether);
+        vm.deal(bob, 100 ether);
+        vm.deal(charlie, 100 ether);
+
+        vm.prank(alice);
+        spireth.mint();
+        vm.prank(bob);
+        spireth.mint();
+        vm.prank(charlie);
+        spireth.mint();
+        vm.prank(owner);
+        spireth.soundHorn();
+
+        bytes32 commitment = keccak256(abi.encodePacked(uint256(1), uint256(0)));
+        vm.prank(alice);
+        spireth.commitRoll{value: 0.5 ether}(0, commitment);
+        vm.prank(bob);
+        spireth.commitRoll{value: 0.5 ether}(1, commitment);
+        vm.prank(charlie);
+        spireth.commitRoll{value: 0.5 ether}(2, commitment);
+
+        _freezeWithBellRinger(0);
+
+        uint256 rankPool = spireth.rankPrizePool();
+        uint256 amount0 = rankPool / 3;
+        uint256 amount1 = rankPool / 3;
+        uint256 amount2 = rankPool - amount0 - amount1;
+
+        bytes32[] memory leaves = new bytes32[](3);
+        leaves[0] = MerkleTreeHelper.prizeLeaf(0, amount0);
+        leaves[1] = MerkleTreeHelper.prizeLeaf(1, amount1);
+        leaves[2] = MerkleTreeHelper.prizeLeaf(2, amount2);
+
+        vm.prank(owner);
+        spireth.publishPrizeRoot(MerkleTreeHelper.buildRoot(leaves));
+
+        vm.prank(alice);
+        spireth.claimRank(0, amount0, MerkleTreeHelper.getProof(leaves, 0));
+        vm.prank(bob);
+        spireth.claimRank(1, amount1, MerkleTreeHelper.getProof(leaves, 1));
+        vm.prank(charlie);
+        spireth.claimRank(2, amount2, MerkleTreeHelper.getProof(leaves, 2));
+
+        assertEq(spireth.rankClaimedTotal(), amount0 + amount1 + amount2);
+        assertLe(spireth.rankClaimedTotal(), rankPool);
+    }
+
     function test_DevFeeSoftFailAndWithdraw() public {
         RevertingReceiver revertingDev = new RevertingReceiver();
         TheSpireth spirethWithRevertingDev = new TheSpireth(owner, address(revertingDev), ROLL_COST, MINT_CAP);
@@ -771,18 +944,18 @@ contract TheSpirethTest is Test {
     }
 
     function _freezeWithBellRinger() internal {
+        _freezeWithBellRinger(0);
+    }
+
+    function _freezeWithBellRinger(uint256 bellRingerId) internal {
         uint256 pool = spireth.prizePool();
         uint256 bellPrize = pool * 20 / 100;
         uint256 rankPool = pool - bellPrize;
-        
+
         vm.store(address(spireth), bytes32(uint256(11)), bytes32(uint256(2)));
-        
-        vm.store(address(spireth), bytes32(uint256(14)), bytes32(uint256(0)));
-        
+        vm.store(address(spireth), bytes32(uint256(14)), bytes32(bellRingerId));
         vm.store(address(spireth), bytes32(uint256(15)), bytes32(uint256(1)));
-        
         vm.store(address(spireth), bytes32(uint256(20)), bytes32(bellPrize));
-        
         vm.store(address(spireth), bytes32(uint256(23)), bytes32(rankPool));
     }
     
